@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+checkpoints/
+.weather_cache/
+.pytest_cache/
+.claude/
