@@ -29,41 +29,41 @@ Geomar_AI_Oxygen/
 
 ## Phase 1 — Environment & project setup
 
-- [ ] Create `requirements.txt` (or `pyproject.toml`) up front — this was skipped last time (`SPEC.md` §11) and cost a from-memory dependency reconstruction. Start from `Documentation/reference/previous-implementation-pip-freeze.txt` as a known-working baseline (see `Documentation/ENVIRONMENT.md`), but re-resolve rather than pinning blindly — some of those versions may have moved on.
-- [ ] Set up a virtual environment, install dependencies, confirm `import torch, pytorch_forecasting, lightning, streamlit, wetterdienst` all succeed.
-- [ ] Confirm network access to the DWD API works (`wetterdienst`) — the pipeline has a hard live-network dependency (`SPEC.md` §2/§11).
-- [ ] Add a `.gitignore` (venv, `__pycache__`, model checkpoints/logs directory) if this becomes a git repo — not currently one.
+- [x] Create `requirements.txt` (or `pyproject.toml`) up front — this was skipped last time (`SPEC.md` §11) and cost a from-memory dependency reconstruction. Start from `Documentation/reference/previous-implementation-pip-freeze.txt` as a known-working baseline (see `Documentation/ENVIRONMENT.md`), but re-resolve rather than pinning blindly — some of those versions may have moved on.
+- [x] Set up a virtual environment, install dependencies, confirm `import torch, pytorch_forecasting, lightning, streamlit, wetterdienst` all succeed.
+- [x] Confirm network access to the DWD API works (`wetterdienst`) — the pipeline has a hard live-network dependency (`SPEC.md` §2/§11).
+- [x] Add a `.gitignore` (venv, `__pycache__`, model checkpoints/logs directory) if this becomes a git repo — not currently one. *(Also added `.claude/`, `.weather_cache/`, `.pytest_cache/` once the repo actually existed.)*
 
 ## Phase 2 — Data ingestion (`src/data_ingestion.py`)
 
 Implements `SPEC.md` §2–3.
 
-- [ ] Load the three raw files from `Documentation/data/` with the correct separator/header-skip/column-mapping per `SPEC.md` §3's schema table.
-- [ ] Apply the oxygen unit conversion correctly (µmol/kg → µmol/L via `×1.015` for the 1957–2014 file only) — get this wrong and every downstream number is silently off.
-- [ ] Concatenate the two ocean series; left-join in supplementary chlorophyll on `(Date, Depth_m)`, filling nulls only.
-- [ ] Implement the DWD weather fetch (station 05930, hourly wind + air temp, historical+recent periods), resample to daily means, vectorize wind to `Wind_U`/`Wind_V`.
-- [ ] **Add a local cache for the weather fetch** (e.g. a parquet/CSV dump keyed by date range) — flagged as a gap in the previous implementation (`SPEC.md` §11); historical DWD data doesn't change, so re-fetching it every run is wasted network dependency.
-- [ ] Join weather onto the ocean series via `merge_asof` (nearest match, ≤3 day tolerance).
-- [ ] Unit test: load a small fixture slice of each raw file format and assert the harmonized schema/columns/units come out correct, especially the oxygen conversion.
+- [x] Load the three raw files from `Documentation/data/` with the correct separator/header-skip/column-mapping per `SPEC.md` §3's schema table.
+- [x] Apply the oxygen unit conversion correctly (µmol/kg → µmol/L via `×1.015` for the 1957–2014 file only) — get this wrong and every downstream number is silently off.
+- [x] Concatenate the two ocean series; left-join in supplementary chlorophyll on `(Date, Depth_m)`, filling nulls only.
+- [x] Implement the DWD weather fetch (station 05930, hourly wind + air temp, historical+recent periods), resample to daily means, vectorize wind to `Wind_U`/`Wind_V`.
+- [x] **Add a local cache for the weather fetch** (e.g. a parquet/CSV dump keyed by date range) — flagged as a gap in the previous implementation (`SPEC.md` §11); historical DWD data doesn't change, so re-fetching it every run is wasted network dependency. *(CSV cache at `.weather_cache/schoenhagen_daily.csv`, gitignored.)*
+- [x] Join weather onto the ocean series via `merge_asof` (nearest match, ≤3 day tolerance).
+- [x] Unit test: load a small fixture slice of each raw file format and assert the harmonized schema/columns/units come out correct, especially the oxygen conversion. *(`tests/test_data_ingestion.py`, 3 tests.)*
 
 ## Phase 3 — Cleaning & resampling (`src/pipeline.py`)
 
 Implements `SPEC.md` §4.
 
-- [ ] Coerce numeric columns, resample to weekly (`W-MON`) per depth independently, interpolate gaps ≤8 weeks, back/forward-fill remaining edges.
-- [ ] Add `Time_Idx` and `month_sin`/`month_cos`.
-- [ ] **Run the interpolation-vs-known-events check from `SPEC.md` §4**: once Phase 4's event list exists, verify how many known hypoxic episodes fall inside an interpolated gap; shrink the interpolation window for the target variable specifically if this looks like a problem.
-- [ ] Unit test: construct a small synthetic series with a known gap and assert interpolation/fill behavior matches spec (limit respected, edges ffilled/bfilled correctly).
+- [x] Coerce numeric columns, resample to weekly (`W-MON`) per depth independently, interpolate gaps ≤8 weeks, back/forward-fill remaining edges. *(Implemented with `interpolate(limit_area="inside")` + `bfill/ffill(limit_area="outside")` so the 8-week cap is actually enforced on interior gaps — a correctness fix over the naive unconditional-bfill/ffill approach the previous implementation used, verified with a manual before/after check.)*
+- [x] Add `Time_Idx` and `month_sin`/`month_cos`.
+- [x] **Run the interpolation-vs-known-events check from `SPEC.md` §4**: once Phase 4's event list exists, verify how many known hypoxic episodes fall inside an interpolated gap; shrink the interpolation window for the target variable specifically if this looks like a problem. *(Done 2026-08-11: 8.5% of known weeks are both interpolated and hypoxic, but always via short in-limit fills between real casts, never long-gap fabrication — kept the 8-week limit as-is. Findings recorded in `SPEC.md` §4.)*
+- [x] Unit test: construct a small synthetic series with a known gap and assert interpolation/fill behavior matches spec (limit respected, edges ffilled/bfilled correctly). *(`tests/test_pipeline.py`, 3 tests.)*
 
 ## Phase 4 — Labeling & target definition (`src/labeling.py`)
 
 Implements `SPEC.md` §6.
 
-- [ ] **Imbalance audit** (`SPEC.md` §6.2): compute and report what fraction of weekly 25 m `O2_umol_L` observations fall below each candidate threshold (80/60/30 µmol/L starting proposal), and their distribution over time. Do this before finalizing anything else in this phase.
-- [ ] Cross-check candidate hypoxic periods against literature-documented events (`Documentation/OPEN_QUESTIONS.md` #3) to build the held-out event-study set used in Phase 8/9.
-- [ ] Decide and implement the target transform (`SPEC.md` §6.3) — plot raw `O2_umol_L` vs. candidate "oxygen deficit" distributions, pick a transform only if the data actually supports needing one.
-- [ ] Implement the sample-weight column (`SPEC.md` §6.4) — start with a coarse tiered scheme, expose the tier boundaries and weight values as easily-tunable constants (not hardcoded inline), since these are meant to be tuned empirically per §6.4/Phase 7 below.
-- [ ] Output: a dataframe with the target, the deficit/transformed target, and a `sample_weight` column ready to hand to dataset construction.
+- [x] **Imbalance audit** (`SPEC.md` §6.2): compute and report what fraction of weekly 25 m `O2_umol_L` observations fall below each candidate threshold (80/60/30 µmol/L starting proposal), and their distribution over time. Do this before finalizing anything else in this phase. *(Measured: 15.98%/11.94%/6.10%; seasonally concentrated Jul–Oct; non-stationary across decades. See `SPEC.md` §6.2.)*
+- [x] Cross-check candidate hypoxic periods against literature-documented events (`Documentation/OPEN_QUESTIONS.md` #3) to build the held-out event-study set used in Phase 8/9. *(`identify_hypoxic_episodes()` derives 44 episodes from threshold crossings, up to 17 weeks long — a working event set until a literature-verified list is available; still worth pursuing `OPEN_QUESTIONS.md` #3.)*
+- [x] Decide and implement the target transform (`SPEC.md` §6.3) — plot raw `O2_umol_L` vs. candidate "oxygen deficit" distributions, pick a transform only if the data actually supports needing one. *(Decided: no transform needed — see `SPEC.md` §6.3.)*
+- [x] Implement the sample-weight column (`SPEC.md` §6.4) — start with a coarse tiered scheme, expose the tier boundaries and weight values as easily-tunable constants (not hardcoded inline), since these are meant to be tuned empirically per §6.4/Phase 7 below. *(`THRESHOLDS`/`TIER_WEIGHTS` module-level constants in `src/labeling.py`.)*
+- [x] Output: a dataframe with the target, the deficit/transformed target, and a `sample_weight` column ready to hand to dataset construction. *(`label_hypoxia_risk()`.)*
 
 ## Phase 5 — Feature engineering (`src/features.py`)
 

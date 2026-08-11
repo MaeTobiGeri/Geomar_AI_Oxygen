@@ -87,13 +87,22 @@ Ocean sampling is irregular (ship-based visits, not a fixed sensor cadence). Per
 3. Linearly interpolate gaps of up to **8 consecutive weeks**; beyond that, don't fabricate data — leave it for back/forward-fill only at the series edges.
 4. Add a global integer `Time_Idx` (sequence position) and cyclical calendar encodings `month_sin`/`month_cos` (`sin`/`cos` of `2π × month / 12`).
 
-**Known limitation carried forward from the previous implementation**: 8-week linear interpolation
-across a variable that's specifically being used to detect brief hypoxic dips risks smoothing over
-the very events being predicted, if a real dip happens to fall inside an interpolated gap. Worth
-checking, once the pipeline is built, how many of the historically-known hypoxic episodes
-(`Documentation/OPEN_QUESTIONS.md` #3) fall partially or fully inside an interpolated gap — if
-several do, the imputation window may need shrinking specifically around the target variable, even
-if 8 weeks remains reasonable for input features.
+**Known limitation carried forward from the previous implementation — checked (2026-08-11)**:
+8-week linear interpolation across a variable that's specifically being used to detect brief
+hypoxic dips risks smoothing over the very events being predicted, if a real dip happens to fall
+inside an interpolated gap. Measured directly against the real pipeline output: of the 2,722
+known (non-null) weekly 25 m observations, 2,277 (83.6%) are filled by interpolation rather than a
+raw ship-based sample — expected, since weekly resolution is far finer than actual sampling
+frequency, not a sign of long-gap fabrication. Of those interpolated weeks, 230 (8.5% of all known
+weeks) fall below the 60 µmol/L hypoxic line. This is *not* evidence of long-gap fabrication —
+every interpolated value is, by construction, a short linear fill between two real bracketing
+observations within the 8-week limit (`limit_area="inside"`, see `src/pipeline.py`), not an
+extrapolation across a season-long gap — but it does mean most individual "hypoxic weeks" in the
+labeled series are short-interval estimates rather than direct measurements. **Decision: keep the
+8-week limit as-is** — shrinking it further would mostly remove legitimate short interpolations
+between closely-spaced real casts, not fix a fabrication problem, since the limit already prevents
+interpolation across long gaps. Revisit only if a specific held-out event's timing/magnitude looks
+wrong during Phase 9 evaluation.
 
 ## 5. Feature engineering
 
@@ -130,10 +139,11 @@ they should be evaluated against the tail metrics (§7 below), not aggregate err
 
 ## 6. Target definition & sample weighting
 
-### 6.1 Threshold tiers (starting proposal — validate against §6.2 before finalizing)
+### 6.1 Threshold tiers — confirmed (2026-08-11) against real data, see §6.2
 
-Based on the ecological hypoxia line already established in `Research.txt` (~60 µmol/L), propose
-three tiers, analogous to IRANNA's 1,000/2,000/3,000 nT strong/extreme/severe structure:
+Based on the ecological hypoxia line already established in `Research.txt` (~60 µmol/L), three
+tiers, analogous to IRANNA's 1,000/2,000/3,000 nT strong/extreme/severe structure. Implemented in
+`src/labeling.py`'s `THRESHOLDS`:
 
 | Tier | Threshold | Rationale |
 |---|---|---|
@@ -141,33 +151,42 @@ three tiers, analogous to IRANNA's 1,000/2,000/3,000 nT strong/extreme/severe st
 | Hypoxic | < 60 µmol/L | The standard ecological hypoxia definition |
 | Severe | < 30 µmol/L | Well below the hypoxia line — acute risk |
 
-### 6.2 Measure the actual imbalance before finalizing weights or transform
+### 6.2 Measured imbalance (2026-08-11, real weekly 25 m series, 2,722 known weeks, 1957–2023)
 
-Before locking in the tiers above or any target transform, compute — the same way the reference
-paper's Figure 2 characterizes the `|SML|` distribution — what fraction of weekly `O2_umol_L`
-observations at 25 m fall below each candidate threshold, and how those weeks are distributed over
-time (seasonal-only vs. also trending across years). **Expect a far gentler imbalance than IRANNA's**
-(their tiers hold 0.33% / 0.01% / 0.0006% of samples) since oxygen is a bounded physical quantity,
-not a heavy-tailed index — the weight tiers in §6.3 will likely need to be less aggressive than the
-paper's ~1×/10×/40×/80×/160× progression.
+Confirmed the expectation below by actually computing it, the same way the reference paper's
+Figure 2 characterizes the `|SML|` distribution: **15.98% of weeks fall below 80 µmol/L, 11.94%
+below 60, 6.10% below 30** — a far gentler imbalance than IRANNA's (their tiers hold 0.33% / 0.01%
+/ 0.0006% of samples), confirming oxygen is a bounded physical quantity, not a heavy-tailed index.
+The weight tiers in §6.4 are correspondingly gentler than the paper's ~1×/10×/40×/80×/160×
+progression. The imbalance is also strongly non-stationary: hypoxic weeks are concentrated
+July–October (the productive/stratified season, as `Research.txt` predicts) and were essentially
+absent before 1970 (0% of weeks below 80 µmol/L in the 1950s/60s) but common from the 1980s onward
+(19–29% of weeks per decade) — a real historical trend, not sampling noise, worth keeping in mind
+for Phase 6/8's chronological split (early decades contain almost no positive examples).
 
-### 6.3 Target transform
+### 6.3 Target transform — decided: none
 
-Plot the histogram of raw `O2_umol_L` and of a candidate **"oxygen deficit"** `max(0, threshold −
-O2_umol_L)`. Only add a log/`log1p` transform if the deficit distribution actually turns out skewed
-enough to need it (the way the paper checked `log₁₀(|SML|)` produced a more Gaussian-like
-distribution before committing to it, rather than assuming a transform was needed) — don't assume
-the same transform applies without checking, since oxygen isn't a multi-order-of-magnitude quantity
-the way `|SML|` is.
+Checked (2026-08-11) against the real data: the raw `O2_umol_L` distribution has skew ≈ −0.29
+(near-symmetric already). The candidate **"oxygen deficit"** `max(0, 60 − O2_umol_L)`, restricted
+to weeks that are actually hypoxic (deficit > 0, n=325), has skew ≈ 0.08 — already close to
+symmetric. Applying `log1p` to that nonzero deficit made skew **worse**, not better (−1.09,
+now skewed the other direction). **Decision: no transform.** The model's target stays plain
+`O2_umol_L` (interpretable, quantile-native, directly usable by the app); `oxygen_deficit` is
+computed separately by `src/labeling.py` purely for weighting/evaluation, untransformed. This
+confirms §6.3's original prediction — oxygen isn't a multi-order-of-magnitude quantity the way
+`|SML|` is, so it doesn't need the same compression.
 
-### 6.4 Sample weighting — the actual technique being adopted
+### 6.4 Sample weighting — implemented in `src/labeling.py`
 
 Assign each training sample a weight based on how severe its target value is: `wᵢ = 1.0` for
-normoxic samples (above the "watch" tier), progressively larger for samples in and below each tier.
-**Don't derive these from a formula** — start with a coarse tiered scheme matching §6.1's
-thresholds and tune the actual weight values empirically against tail-metric validation
-performance (§7), the same way the paper's Figure 3 shows hand-tuned discrete clusters rather than a
-smooth function.
+normoxic samples (above the "watch" tier), progressively larger for samples in and below each
+tier. Given §6.2's measured imbalance is far gentler than IRANNA's, the starting weights are
+correspondingly gentler than the paper's progression — `TIER_WEIGHTS` in `src/labeling.py`:
+normoxic 1.0, watch 3.0, hypoxic 6.0, severe 12.0. **Still a starting point, not a derived
+formula** — tune against tail-metric validation performance once Phase 7 training exists, the same
+way the paper's Figure 3 shows hand-tuned discrete clusters rather than a smooth function. Weeks
+with unknown `O2_umol_L` (an interior gap wider than §4's interpolation limit) get `NaN` weight,
+not a default of 1.0 — treating "unknown" as "confidently normoxic" would silently bias training.
 
 ### 6.5 Implementation mechanism — verified against the installed dependency stack
 
