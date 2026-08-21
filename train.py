@@ -184,14 +184,9 @@ def main():
     print("\n" + "-"*80)
     print("Phase 2: Data Ingestion")
     print("-"*80)
-    df_ocean = data_ingestion._load_ocean_data()
-    print(f"Ocean data loaded: {len(df_ocean)} rows")
-
-    df_weather = data_ingestion._load_weather_data()
-    print(f"Weather data loaded: {len(df_weather)} rows")
-
-    df_combined = data_ingestion._merge_weather_to_ocean(df_ocean, df_weather)
-    print(f"Combined data: {len(df_combined)} rows")
+    df_combined = data_ingestion.load_and_clean_boknis_data()
+    print(f"Ocean + weather data loaded and merged: {len(df_combined)} rows")
+    print(f"  Date range: {df_combined['Date'].min()} to {df_combined['Date'].max()}")
 
     # Phase 3: Weekly resampling and imputation
     print("\n" + "-"*80)

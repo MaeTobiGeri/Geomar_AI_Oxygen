@@ -140,9 +140,7 @@ def main():
 
     # Load data (Phases 2-5)
     print("\nLoading data...")
-    df_ocean = data_ingestion._load_ocean_data()
-    df_weather = data_ingestion._load_weather_data()
-    df_combined = data_ingestion._merge_weather_to_ocean(df_ocean, df_weather)
+    df_combined = data_ingestion.load_and_clean_boknis_data()
 
     # Weekly resampling
     df_weekly = pipeline.prepare_weekly_series(df_combined)

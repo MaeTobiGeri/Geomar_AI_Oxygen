@@ -49,9 +49,7 @@ def objective(trial: optuna.Trial) -> float:
 
     # Load and prepare data (Phases 2-5)
     print(f"\n[Trial {trial.number}] Loading data...")
-    df_ocean = data_ingestion._load_ocean_data()
-    df_weather = data_ingestion._load_weather_data()
-    df_combined = data_ingestion._merge_weather_to_ocean(df_ocean, df_weather)
+    df_combined = data_ingestion.load_and_clean_boknis_data()
 
     # Weekly resampling (Phase 3)
     df_weekly = pipeline.prepare_weekly_series(df_combined)
