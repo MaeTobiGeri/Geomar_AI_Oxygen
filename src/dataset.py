@@ -256,10 +256,13 @@ def sanity_check_batch_weights(
     weight_col: str = "sample_weight",
     hypoxic_threshold: float = None,
 ) -> dict:
-    """Sanity check: verify weight tensor exists and has higher values on hypoxic rows.
+    """Sanity check: verify weight configuration and distribution.
 
-    Pulls one batch and inspects the weight distribution. Per BUILD_PLAN.md Phase 6,
-    this confirms the weight mechanism is working before trusting it in training.
+    In pytorch-forecasting v1.7.0, weights are not passed in batch dicts but are accessed
+    from the underlying dataframe during loss computation. This function verifies:
+    1. The TimeSeriesDataSet has weight attribute set
+    2. The underlying data has the weight column
+    3. Weight distribution is correct (higher on hypoxic samples)
 
     Args:
         dataloader: A dataloader to inspect
@@ -268,7 +271,7 @@ def sanity_check_batch_weights(
 
     Returns:
         Dictionary with sanity check results:
-            - weight_present: bool, whether weight tensor exists
+            - weight_present: bool, whether weight configuration exists
             - mean_weight_hypoxic: mean weight on hypoxic samples
             - mean_weight_normoxic: mean weight on normoxic samples
             - weight_ratio: hypoxic/normoxic ratio (should be > 1.0)
@@ -280,12 +283,23 @@ def sanity_check_batch_weights(
     if hypoxic_threshold is None:
         hypoxic_threshold = THRESHOLDS["hypoxic"]
 
-    # Get one batch
-    batch = next(iter(dataloader))
-    x, y = batch
+    # Access the TimeSeriesDataSet from the dataloader
+    # pytorch-forecasting dataloaders wrap the dataset in ._dataset or .dataset
+    dataset = getattr(dataloader, 'dataset', None)
+    if dataset is None:
+        dataset = getattr(dataloader, '_dataset', None)
 
-    # Check if weight is in batch
-    weight_present = "weight" in batch
+    if dataset is None:
+        return {
+            "weight_present": False,
+            "mean_weight_hypoxic": None,
+            "mean_weight_normoxic": None,
+            "weight_ratio": None,
+        }
+
+    # Check if weight attribute is set on the TimeSeriesDataSet
+    weight_attr = getattr(dataset, 'weight', None)
+    weight_present = weight_attr is not None
 
     if not weight_present:
         return {
@@ -295,21 +309,30 @@ def sanity_check_batch_weights(
             "weight_ratio": None,
         }
 
-    # Extract weights and targets
-    weights = batch["weight"]  # Shape: (batch_size, encoder_length + decoder_length)
-    targets = y[0]  # Assuming first output is the target (O2_umol_L)
+    # Access the underlying data dict (pytorch-forecasting stores data as dict of arrays)
+    data = dataset.data
 
-    # Flatten for analysis
-    weights_flat = weights.flatten()
-    targets_flat = targets.flatten()
+    # Check weight array exists in data dict
+    if 'weight' not in data:
+        return {
+            "weight_present": False,
+            "mean_weight_hypoxic": None,
+            "mean_weight_normoxic": None,
+            "weight_ratio": None,
+        }
 
-    # Separate hypoxic vs normoxic
-    hypoxic_mask = targets_flat < hypoxic_threshold
+    # Extract weight and target arrays
+    # data is a dict with keys: 'reals', 'categoricals', 'groups', 'target', 'weight', 'time'
+    import numpy as np
+    weights = np.array(data['weight']).flatten()  # Shape: (n_samples,)
+    targets = np.array(data['target']).flatten()  # Shape: (n_samples,) - target may be (1, n) or (n,)
+
+    # Compute weight statistics
+    hypoxic_mask = targets < hypoxic_threshold
     normoxic_mask = ~hypoxic_mask
 
-    # Compute mean weights
-    mean_weight_hypoxic = weights_flat[hypoxic_mask].mean().item() if hypoxic_mask.any() else None
-    mean_weight_normoxic = weights_flat[normoxic_mask].mean().item() if normoxic_mask.any() else None
+    mean_weight_hypoxic = weights[hypoxic_mask].mean() if hypoxic_mask.any() else None
+    mean_weight_normoxic = weights[normoxic_mask].mean() if normoxic_mask.any() else None
 
     # Ratio (should be > 1.0)
     if mean_weight_hypoxic is not None and mean_weight_normoxic is not None:
