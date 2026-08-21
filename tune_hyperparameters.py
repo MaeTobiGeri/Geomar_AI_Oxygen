@@ -63,6 +63,9 @@ def objective(trial: optuna.Trial) -> float:
     # Labeling (Phase 4)
     df_labeled = labeling.label_hypoxia_risk(df_features)
 
+    # Drop rows with NaN values (TimeSeriesDataSet requirement)
+    df_labeled = df_labeled.dropna().reset_index(drop=True)
+
     # Train/val split (Phase 6)
     train_df, val_df = dataset.split_train_validation(df_labeled, train_ratio=0.8)
 

@@ -154,6 +154,9 @@ def main():
     # Labeling
     df_labeled = labeling.label_hypoxia_risk(df_features)
 
+    # Drop rows with NaN values (TimeSeriesDataSet requirement)
+    df_labeled = df_labeled.dropna().reset_index(drop=True)
+
     print(f"Total samples: {len(df_labeled)}")
     print(f"Hypoxic samples: {(df_labeled['O2_umol_L'] < labeling.THRESHOLDS['hypoxic']).sum()}")
 

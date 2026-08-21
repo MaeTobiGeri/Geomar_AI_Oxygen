@@ -218,6 +218,15 @@ def main():
     # Label hypoxia risk
     df_labeled = labeling.label_hypoxia_risk(df_features)
 
+    # Drop rows with NaN values (from gaps wider than interpolation limit)
+    # This is necessary because TimeSeriesDataSet doesn't accept NaN values
+    rows_before = len(df_labeled)
+    df_labeled = df_labeled.dropna().reset_index(drop=True)
+    rows_after = len(df_labeled)
+    rows_dropped = rows_before - rows_after
+    print(f"\nDropped {rows_dropped} rows with NaN values ({rows_dropped/rows_before*100:.1f}%)")
+    print(f"Complete rows remaining: {rows_after}")
+
     # Print weight statistics
     weight_config = {
         "thresholds": labeling.THRESHOLDS,
