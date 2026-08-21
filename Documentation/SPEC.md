@@ -33,7 +33,7 @@ production deployment.
 | Historical ocean series (1957–2014) | `Documentation/data/BoknisEck_1957-2014.csv` | `;`-separated, 31 header rows to skip | PANGAEA export |
 | Recent ocean series (2015–2023) | `Documentation/data/BoknisEck_2015-2023.csv` | `;`-separated, 34 header rows to skip | PANGAEA export |
 | Supplementary chlorophyll (2015–2021) | `Documentation/data/BoknisEck_chl_2015-2021.tab` | tab-separated, 22 header rows to skip | PANGAEA export |
-| Weather | live pull, DWD station **05930 (Schönhagen)** via [`wetterdienst`](https://pypi.org/project/wetterdienst/) | API | Hourly wind speed, wind direction, 2 m air temperature. **Requires network access at build/train time — there's no local cache or fallback in this spec.** |
+| Weather | live pull, DWD station **05930 (Schönhagen)** via [`wetterdienst`](https://pypi.org/project/wetterdienst/) | API | Hourly wind speed, wind direction, 2 m air temperature. 
 
 Reference material (not raw data, but informs decisions below): `Documentation/reference/Research.txt`
 (literature review — feature rationale, station-specific physics, hypoxia threshold) and

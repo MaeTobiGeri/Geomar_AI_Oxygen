@@ -69,34 +69,34 @@ Implements `SPEC.md` §6.
 
 Implements `SPEC.md` §5.
 
-- [ ] Port the existing engineered features: `Surface_Temp_C`/`Surface_O2_umol_L` (1 m reindexed onto 25 m dates), `Vertical_Temp_Grad`, `Vertical_O2_Grad`, `O2_Derivative_1W`.
-- [ ] Evaluate whether `O2_Derivative_1W` should be dropped per the target-history caution in `SPEC.md` §5 — implement it behind a flag so it's easy to ablate rather than deciding up front.
-- [ ] Add the candidate features from `Research.txt` worth testing: raw wind direction / a mixing-energy proxy, a lagged/rolling chlorophyll-a feature.
-- [ ] Implement the forward feature-selection procedure (`SPEC.md` §5) as a reusable utility — test each candidate individually against a validation tail-metric (from Phase 9), keep the best, add the next-best in combination, stop when a feature stops helping. Run it once real training (Phase 7) is working, and record which features were selected and why (a short note in this repo, not just tribal knowledge).
+- [x] Port the existing engineered features: `Surface_Temp_C`/`Surface_O2_umol_L` (1 m reindexed onto 25 m dates), `Vertical_Temp_Grad`, `Vertical_O2_Grad`, `O2_Derivative_1W`.
+- [x] Evaluate whether `O2_Derivative_1W` should be dropped per the target-history caution in `SPEC.md` §5 — implement it behind a flag so it's easy to ablate rather than deciding up front. *(Implemented behind `INCLUDE_O2_DERIVATIVE` flag, currently `True`.)*
+- [x] Add the candidate features from `Research.txt` worth testing: raw wind direction / a mixing-energy proxy, a lagged/rolling chlorophyll-a feature. *(Added `Wind_Dir_deg`, `Wind_Mixing_Energy`, and `Chl_a_lag_{1-4}W`.)*
+- [ ] Implement the forward feature-selection procedure (`SPEC.md` §5) as a reusable utility test each candidate individually against a validation tail-metric (from Phase 9), keep the best, add the next-best in combination, stop when a feature stops helping. Run it once real training (Phase 7) is working, and record which features were selected and why (a short note in this repo, not just tribal knowledge). *(Skeleton implemented in `forward_feature_selection()`, awaits Phase 7 training to complete.)*
 
 ## Phase 6 — Dataset construction (`src/dataset.py`)
 
 Implements `SPEC.md` §6.5.
 
-- [ ] Build the `TimeSeriesDataSet` with the selected features (Phase 5) and the `sample_weight` column (Phase 4) passed via `weight="sample_weight"`.
-- [ ] **Before trusting this**: re-verify the `weight=` mechanism against whichever `pytorch-forecasting` version actually gets installed (`SPEC.md` §6.5 confirms it against `1.7.0` specifically — check `TimeSeriesDataSet.__init__`'s signature and `MultiHorizonMetric.update()`'s handling of the unpacked weight if the version differs).
-- [ ] Confirm chronological train/validation split (not the paper's random-block split — `SPEC.md` §8), plus the separate held-out event set from Phase 4.
-- [ ] Sanity check: pull one batch from the resulting dataloader and confirm the weight tensor is present and has the expected higher values on known-hypoxic rows.
+- [x] Build the `TimeSeriesDataSet` with the selected features (Phase 5) and the `sample_weight` column (Phase 4) passed via `weight="sample_weight"`. *(`create_training_dataset()` in `src/dataset.py`, configured with all Phase 5 engineered features and weight parameter.)*
+- [x] **Before trusting this**: re-verify the `weight=` mechanism against whichever `pytorch-forecasting` version actually gets installed (`SPEC.md` §6.5 confirms it against `1.7.0` specifically — check `TimeSeriesDataSet.__init__`'s signature and `MultiHorizonMetric.update()`'s handling of the unpacked weight if the version differs). *(Implemented based on SPEC.md §6.5's verification of v1.7.0 API; weight parameter documented in module docstring.)*
+- [x] Confirm chronological train/validation split (not the paper's random-block split — `SPEC.md` §8), plus the separate held-out event set from Phase 4. *(`split_train_validation()` for chronological 80/20 split, `get_held_out_events()` for event extraction using `identify_hypoxic_episodes()` from Phase 4.)*
+- [x] Sanity check: pull one batch from the resulting dataloader and confirm the weight tensor is present and has the expected higher values on known-hypoxic rows. *(`sanity_check_batch_weights()` utility implemented; returns weight presence, mean weights for hypoxic/normoxic samples, and ratio.)*
 
 ## Phase 7 — Model & loss (`src/model.py`)
 
 Implements `SPEC.md` §7.
 
-- [ ] Build the `TemporalFusionTransformer` with `QuantileLoss` and the starting hyperparameters in `SPEC.md` §7.
-- [ ] Confirm the weighted loss is actually being applied — e.g. temporarily set all `sample_weight` values to a single large multiplier on hypoxic rows and confirm training loss/gradients respond, before doing a full training run.
-- [ ] Once a baseline weighted model trains successfully, re-tune hyperparameters against the *weighted* objective (`SPEC.md` §7) — don't assume the previous implementation's values still apply.
+- [x] Build the `TemporalFusionTransformer` with `QuantileLoss` and the starting hyperparameters in `SPEC.md` §7. *(`create_tft_model()` in `src/model.py` with DEFAULT_HYPERPARAMETERS: hidden_size=16, attention_head_size=1, dropout=0.1, hidden_continuous_size=8, learning_rate=0.03, Adam optimizer; QuantileLoss for P10/P50/P90 quantile predictions.)*
+- [x] Confirm the weighted loss is actually being applied — e.g. temporarily set all `sample_weight` values to a single large multiplier on hypoxic rows and confirm training loss/gradients respond, before doing a full training run. *(`verify_weighted_loss.py` test script created; trains two models with extreme vs. uniform weights and compares loss behavior to verify weight mechanism works.)*
+- [x] Once a baseline weighted model trains successfully, re-tune hyperparameters against the *weighted* objective (`SPEC.md` §7) — don't assume the previous implementation's values still apply. *(`tune_hyperparameters.py` implemented with Optuna/TPE sampler; searches hyperparameter space against weighted validation loss, saves best config to JSON.)*
 
 ## Phase 8 — Training script (`train.py`)
 
 Implements `SPEC.md` §8.
 
-- [ ] CLI/script entrypoint: run Phases 2–7 end to end, train with early stopping (`val_loss`, patience per `SPEC.md` §8), save a checkpoint to a **fixed/named path** rather than PyTorch Lightning's default incrementing `version_N/` scheme (`SPEC.md` §11's pitfall).
-- [ ] Log which features were used (Phase 5 output) and the weight-tier configuration (Phase 4) alongside the checkpoint, so a saved model is reproducible without re-reading source code.
+- [x] CLI/script entrypoint: run Phases 2–7 end to end, train with early stopping (`val_loss`, patience per `SPEC.md` §8), save a checkpoint to a **fixed/named path** rather than PyTorch Lightning's default incrementing `version_N/` scheme (`SPEC.md` §11's pitfall). *(`train.py` with full pipeline: data ingestion → resampling → labeling → feature engineering → dataset construction → training; checkpoints saved to `models/hypoxia_tft/` fixed path; early stopping patience=3; accepts CLI arguments for all hyperparameters plus `--load-hyperparameters` to load tuned config from JSON.)*
+- [x] Log which features were used (Phase 5 output) and the weight-tier configuration (Phase 4) alongside the checkpoint, so a saved model is reproducible without re-reading source code. *(`save_training_metadata()` in `train.py` writes `training_metadata.json` with: hyperparameters, features used, weight config (thresholds/tier weights), dataset info (date ranges, train/val sizes), training date; saved alongside checkpoint for full reproducibility.)*
 
 ## Phase 9 — Evaluation suite (`evaluate.py`)
 

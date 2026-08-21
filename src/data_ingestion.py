@@ -1,6 +1,4 @@
 """Load and harmonize the raw Boknis Eck ocean data and DWD weather data.
-
-Schema and merge rules follow Documentation/SPEC.md sections 2-3.
 """
 
 from pathlib import Path
@@ -121,7 +119,6 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
 
 
 def load_and_clean_boknis_data() -> pd.DataFrame:
-    """Return the harmonized ocean+weather dataframe described in SPEC.md §2-3."""
     ocean = _load_ocean_data().sort_values("Date")
     weather = _fetch_schoenhagen_weather().sort_values("Date")
 

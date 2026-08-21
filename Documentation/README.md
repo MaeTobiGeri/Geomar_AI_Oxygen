@@ -1,16 +1,5 @@
 # Geomar AI Oxygen — Documentation
 
-**Status (2026-08-11): documentation-only. There is no code in this repository right now.** The
-project is being rebuilt from scratch around a new goal — see below — and this folder is the
-complete specification for that rebuild. The previous implementation (a general oxygen-level
-forecaster) was removed; its lessons learned are folded into the docs here rather than kept as
-legacy code.
-
-**New goal**: predict when dissolved oxygen at the **Boknis Eck** time-series station (Baltic Sea,
-Kiel Bight) is heading toward levels dangerous for fish (hypoxia), rather than forecasting the
-general oxygen level at any horizon. The approach adapts an "imbalanced regression" technique from
-a space-weather paper on predicting rare extreme geomagnetic events, applied here to rare extreme
-low-oxygen events.
 
 ## Where to start
 

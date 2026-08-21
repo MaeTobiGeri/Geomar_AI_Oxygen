@@ -6,6 +6,12 @@ without touching the network. The weather fetch is not covered here - it's a liv
 not something a unit test should exercise (Documentation/STYLE.md).
 """
 
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import pandas as pd
 import pytest
 
