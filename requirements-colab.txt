@@ -1,0 +1,28 @@
+# Colab-compatible requirements
+# These versions are compatible with Google Colab's pre-installed environment
+# Use this file instead of requirements.txt when running on Colab
+
+# Core ML/DL - use Colab pre-installed versions
+# torch - use Colab's version (don't reinstall)
+# numpy - use Colab's version (don't reinstall)
+# pandas==2.2.3 - use Colab's version (don't reinstall)
+
+# Project-specific packages
+pytorch-forecasting==1.7.0
+lightning>=2.0.0,<2.7.0
+
+# Data processing (compatible versions)
+wetterdienst>=0.90.0
+
+# Visualization (compatible versions)
+plotly>=5.0.0
+matplotlib>=3.0.0
+
+# Dashboard (optional for training, skip in Colab)
+# streamlit - not needed for training
+
+# Testing (optional in Colab)
+# pytest - not needed for training
+
+# Hyperparameter tuning
+optuna>=3.0.0

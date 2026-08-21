@@ -162,6 +162,18 @@ files.download('models/hypoxia_tft/training_metadata.json')
 ### Problem: "No module named 'src'"
 **Solution**: Make sure you ran the "Clone repository" cell. Current directory should be inside the repository.
 
+### Problem: Version conflicts / dependency errors during install
+**Expected behavior**: You may see warnings like:
+```
+google-colab 1.0.0 requires pandas==2.2.3, but you have pandas 3.0.3
+```
+
+**Solution**: These warnings are SAFE TO IGNORE. The notebook uses Colab-compatible versions:
+- Uses Colab's pre-installed torch, numpy, pandas
+- Only installs project-specific packages (pytorch-forecasting, lightning, etc.)
+- The `requirements.txt` file is for LOCAL installation only
+- Colab uses `requirements-colab.txt` strategy (minimal installs)
+
 ### Problem: "CUDA out of memory"
 **Solutions**:
 - Reduce `--batch-size` (try 32 or 16 instead of 64)
