@@ -132,6 +132,8 @@ def create_training_dataset(
         add_encoder_length=True,
         # CRITICAL: weight parameter enables per-sample loss reweighting (SPEC.md §6.5)
         weight=weight,
+        # Allow gaps in weekly time series after NaN removal (dropna creates non-consecutive weeks)
+        allow_missing_timesteps=True,
     )
 
     return training
