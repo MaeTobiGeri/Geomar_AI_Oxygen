@@ -92,7 +92,7 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
     ).filter_by_station_id(DWD_STATION_ID)
 
     raw = request.values.all().df.to_pandas()
-    hourly = raw.pivot_table(index="date", columns="parameter", values="value").reset_index()
+    hourly = raw.pivot_table(index="date", columns="parameter", values="value", observed=True).reset_index()
     hourly = hourly.rename(
         columns={
             "date": "Date",
@@ -121,6 +121,10 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
 def load_and_clean_boknis_data() -> pd.DataFrame:
     ocean = _load_ocean_data().sort_values("Date")
     weather = _fetch_schoenhagen_weather().sort_values("Date")
+
+    # Ensure both Date columns have the same datetime dtype (fix for pandas version differences)
+    ocean["Date"] = pd.to_datetime(ocean["Date"]).dt.as_unit("ns")
+    weather["Date"] = pd.to_datetime(weather["Date"]).dt.as_unit("ns")
 
     combined = pd.merge_asof(ocean, weather, on="Date", direction="nearest", tolerance=pd.Timedelta("3 days"))
     return combined.sort_values(["Date", "Depth_m"]).reset_index(drop=True)
