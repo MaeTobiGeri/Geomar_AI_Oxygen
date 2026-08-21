@@ -127,6 +127,11 @@ def main():
                         help="Optuna storage URL (e.g., sqlite:///optuna.db)")
     args = parser.parse_args()
 
+    # Allow non-deterministic operations for CUDA performance
+    # Some operations (like upsample_linear1d) don't have deterministic GPU implementations
+    import torch
+    torch.use_deterministic_algorithms(False)
+
     # Create Optuna study with TPE sampler (same as reference paper)
     sampler = TPESampler(seed=42)  # Reproducibility
     study = optuna.create_study(

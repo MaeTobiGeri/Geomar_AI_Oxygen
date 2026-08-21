@@ -205,5 +205,11 @@ def main():
 
 if __name__ == "__main__":
     # Set random seeds for reproducibility
-    pl.seed_everything(42)
+    pl.seed_everything(42, workers=True)
+
+    # Allow non-deterministic operations for CUDA performance
+    # Some operations (like upsample_linear1d) don't have deterministic GPU implementations
+    import torch
+    torch.use_deterministic_algorithms(False)
+
     main()

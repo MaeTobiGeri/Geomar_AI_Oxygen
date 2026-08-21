@@ -134,7 +134,13 @@ def main():
     args = parser.parse_args()
 
     # Set random seed for reproducibility
-    pl.seed_everything(args.seed)
+    # workers=True ensures reproducibility across dataloader workers
+    pl.seed_everything(args.seed, workers=True)
+
+    # Allow non-deterministic operations for CUDA performance
+    # Some operations (like upsample_linear1d) don't have deterministic GPU implementations
+    import torch
+    torch.use_deterministic_algorithms(False)
 
     # Load hyperparameters from JSON if provided
     if args.load_hyperparameters:
