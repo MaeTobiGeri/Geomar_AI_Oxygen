@@ -290,12 +290,12 @@ def main():
     print("\nSanity checking batch weights...")
     weight_check = dataset.sanity_check_batch_weights(train_dl)
     if weight_check["weight_present"]:
-        print(f"  ✓ Weight tensor present in batches")
+        print(f"  Weight tensor present in batches")
         print(f"  Mean weight (hypoxic): {weight_check['mean_weight_hypoxic']:.2f}")
         print(f"  Mean weight (normoxic): {weight_check['mean_weight_normoxic']:.2f}")
         print(f"  Ratio: {weight_check['weight_ratio']:.2f}x")
     else:
-        print(f"  ✗ WARNING: Weight tensor not found in batches!")
+        print(f"  WARNING: Weight tensor not found in batches!")
         sys.exit(1)
 
     # Phase 7: Model training

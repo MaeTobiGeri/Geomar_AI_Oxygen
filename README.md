@@ -2,7 +2,7 @@
 
 Weighted Temporal Fusion Transformer for oxygen forecasting at Boknis Eck Time Series Station (25m depth).
 
-## 🎯 Project Overview
+## Project Overview
 
 This project implements a machine learning model to predict hypoxic events (low oxygen conditions) in the Boknis Eck fjord using:
 - **Temporal Fusion Transformer (TFT)** for multi-horizon time series forecasting
@@ -10,7 +10,7 @@ This project implements a machine learning model to predict hypoxic events (low 
 - **Quantile predictions** (P10/P50/P90) for uncertainty quantification
 - **Interactive dashboard** for visualizing forecasts and risk assessment
 
-## 📊 Key Features
+## Key Features
 
 - **Multi-step forecasting**: Predict oxygen levels 1-4 weeks ahead
 - **Weighted training**: 12x higher weight on severe hypoxic samples
@@ -18,7 +18,7 @@ This project implements a machine learning model to predict hypoxic events (low 
 - **Historical event studies**: Analysis of past hypoxic episodes
 - **Comprehensive evaluation**: ROC-AUC, F1, precision/recall metrics
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -75,7 +75,7 @@ streamlit run app.py -- --checkpoint path/to/checkpoint.ckpt
 
 The dashboard will open in your browser at `http://localhost:8501`
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Geomar_AI_Oxygen/
@@ -110,13 +110,13 @@ Geomar_AI_Oxygen/
         └── training_metadata.json
 ```
 
-## 📈 Model Performance
+## Model Performance
 
 Based on evaluation with tuned hyperparameters:
 
 ### Classification Metrics (Hypoxia Detection)
-- **ROC-AUC**: 0.950 (expected: 0.7-0.85, ✓ exceeded)
-- **F1 Score**: 0.777 (expected: 0.2-0.4, ✓ exceeded)
+- **ROC-AUC**: 0.950 (expected: 0.7-0.85, exceeded)
+- **F1 Score**: 0.777 (expected: 0.2-0.4, exceeded)
 - **Precision**: 0.821
 - **Recall**: 0.738
 
@@ -129,7 +129,7 @@ Based on evaluation with tuned hyperparameters:
 ### vs. Persistence Baseline
 - **88.2% improvement** on hypoxic samples (16.1 vs 135.8 µmol/L RMSE)
 
-## 🔧 Configuration
+## Configuration
 
 ### Hypoxia Thresholds (SPEC.md §6.1)
 - **Severe**: < 30 µmol/L (weight: 12.0)
@@ -157,7 +157,7 @@ Based on evaluation with tuned hyperparameters:
 }
 ```
 
-## 📊 Dashboard Features
+## Dashboard Features
 
 - **Date Selector**: Choose any date with sufficient history (≥8 weeks)
 - **Forecast Horizon**: 1-4 weeks ahead (empirically reliable range)
@@ -172,7 +172,7 @@ Based on evaluation with tuned hyperparameters:
   - Threshold reference lines (30, 60, 120 µmol/L)
   - Hypoxic zone shading
 
-## 🧪 Running Tests
+## Running Tests
 
 ```bash
 # Run all tests
@@ -185,38 +185,38 @@ pytest tests/test_labeling.py -v
 pytest tests/ --cov=src --cov-report=html
 ```
 
-## 📚 Documentation
+## Documentation
 
 - **[SPEC.md](Documentation/SPEC.md)**: Complete technical specification
 - **[BUILD_PLAN.md](Documentation/BUILD_PLAN.md)**: Implementation phases and status
 - **[CONCEPT.md](Documentation/CONCEPT.md)**: Design decisions and architecture
 - **[ENVIRONMENT.md](Documentation/ENVIRONMENT.md)**: Dependency management
 
-## 🤝 Contributing
+## Contributing
 
 1. Read `Documentation/SPEC.md` for technical requirements
 2. Follow the phase-based implementation plan in `Documentation/BUILD_PLAN.md`
 3. Run tests before submitting: `pytest tests/`
 4. Ensure code follows existing patterns in `src/` modules
 
-## 📝 License
+## License
 
 [Add your license here]
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Data source**: Boknis Eck Time Series Station (GEOMAR)
 - **Weather data**: DWD (German Weather Service) via wetterdienst
 - **Model**: Temporal Fusion Transformer (pytorch-forecasting)
 
-## 📧 Contact
+## Contact
 
 [Add your contact information]
 
 ---
 
-**Status**: ✅ Complete (Phases 1-10)
-- ✅ Phase 1-7: Data pipeline and model training
-- ✅ Phase 8: End-to-end training script
-- ✅ Phase 9: Evaluation suite
-- ✅ Phase 10: Interactive dashboard
+**Status**: Complete (Phases 1-10)
+- Phase 1-7: Data pipeline and model training
+- Phase 8: End-to-end training script
+- Phase 9: Evaluation suite
+- Phase 10: Interactive dashboard

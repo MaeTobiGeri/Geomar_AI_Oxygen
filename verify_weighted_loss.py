@@ -188,11 +188,11 @@ def main():
     print(f"\nLoss difference: {loss_diff:.4f} ({loss_diff_pct:.1f}%)")
 
     if loss_diff_pct > 5:
-        print("\n✓ VERIFICATION PASSED: Weighted loss is working!")
+        print("\nVERIFICATION PASSED: Weighted loss is working!")
         print("  The extreme weighted model shows measurably different loss behavior,")
         print("  confirming that the weight parameter affects training.")
     else:
-        print("\n✗ VERIFICATION FAILED: Weighted loss may not be working!")
+        print("\nVERIFICATION FAILED: Weighted loss may not be working!")
         print("  The extreme weighted model shows very similar loss to uniform weights,")
         print("  suggesting the weight parameter is not being applied correctly.")
         print("\n  Check:")

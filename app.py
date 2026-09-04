@@ -312,15 +312,14 @@ def plot_forecast(historical_data: pd.DataFrame, forecast: dict, show_history_we
 def main():
     st.set_page_config(
         page_title="Boknis Eck Hypoxia Forecast",
-        page_icon="🌊",
         layout="wide"
     )
 
-    st.title("🌊 Boknis Eck Hypoxia Prediction Dashboard")
+    st.title("Boknis Eck Hypoxia Prediction Dashboard")
     st.markdown("**Weighted TFT model for oxygen forecasting at 25m depth**")
 
     # Sidebar: Configuration
-    st.sidebar.header("⚙️ Configuration")
+    st.sidebar.header("Configuration")
 
     checkpoint_path = st.sidebar.text_input(
         "Model Checkpoint Path",
@@ -332,7 +331,7 @@ def main():
     try:
         with st.spinner("Loading model and data..."):
             tft_model, df_data, training_dataset = load_model_and_data(checkpoint_path)
-        st.sidebar.success("✓ Model loaded")
+        st.sidebar.success("Model loaded")
     except Exception as e:
         st.error(f"Failed to load model: {e}")
         st.stop()
@@ -345,7 +344,7 @@ def main():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.subheader("📅 Select Forecast Date")
+        st.subheader("Select Forecast Date")
 
         # Date selector
         min_date = df_data['Date'].min() + timedelta(weeks=8)  # Need encoder history
@@ -362,7 +361,7 @@ def main():
         forecast_date = pd.Timestamp(forecast_date)
 
     with col2:
-        st.subheader("🔮 Forecast Horizon")
+        st.subheader("Forecast Horizon")
 
         # Horizon control (SPEC.md §10: bounded to reliable range)
         horizon_weeks = st.slider(
@@ -374,7 +373,7 @@ def main():
         )
 
     # Generate forecast
-    if st.button("🔄 Generate Forecast", type="primary"):
+    if st.button("Generate Forecast", type="primary"):
         with st.spinner("Generating forecast..."):
             forecast = make_prediction(
                 tft_model,
@@ -397,7 +396,7 @@ def main():
         )
 
         # Display risk readout (SPEC.md §10)
-        st.subheader("⚠️ Hypoxia Risk Assessment")
+        st.subheader("Hypoxia Risk Assessment")
 
         risk_col1, risk_col2, risk_col3 = st.columns(3)
 
@@ -424,21 +423,21 @@ def main():
 
         # Risk summary
         if risk['high_risk_pct'] > 50:
-            st.error(f"🔴 **HIGH RISK**: {risk['high_risk_pct']:.0f}% probability of hypoxic conditions in forecast period")
+            st.error(f"**HIGH RISK**: {risk['high_risk_pct']:.0f}% probability of hypoxic conditions in forecast period")
         elif risk['moderate_risk_pct'] > 50:
-            st.warning(f"🟡 **MODERATE RISK**: {risk['moderate_risk_pct']:.0f}% probability of hypoxic conditions in forecast period")
+            st.warning(f"**MODERATE RISK**: {risk['moderate_risk_pct']:.0f}% probability of hypoxic conditions in forecast period")
         elif risk['any_risk_pct'] > 0:
-            st.info(f"🟢 **LOW RISK**: {risk['any_risk_pct']:.0f}% chance of hypoxic conditions in forecast period")
+            st.info(f"**LOW RISK**: {risk['any_risk_pct']:.0f}% chance of hypoxic conditions in forecast period")
         else:
-            st.success("✅ **NO RISK**: No hypoxic conditions forecast in this period")
+            st.success("**NO RISK**: No hypoxic conditions forecast in this period")
 
         # Plot forecast
-        st.subheader("📊 Oxygen Forecast")
+        st.subheader("Oxygen Forecast")
         fig = plot_forecast(df_data, forecast, show_history_weeks=12)
         st.plotly_chart(fig, use_container_width=True)
 
         # Show forecast table
-        with st.expander("📋 Detailed Forecast Data"):
+        with st.expander("Detailed Forecast Data"):
             forecast_df = pd.DataFrame({
                 'Date': forecast['dates'],
                 'P10 (Low)': forecast['p10'],
@@ -446,10 +445,10 @@ def main():
                 'P90 (High)': forecast['p90'],
             })
             forecast_df['Status'] = forecast_df['P50 (Median)'].apply(
-                lambda x: '🔴 Severe' if x < THRESHOLDS['severe']
-                else '🟠 Hypoxic' if x < THRESHOLDS['hypoxic']
-                else '🟡 Watch' if x < THRESHOLDS['watch']
-                else '🟢 Normal'
+                lambda x: 'Severe' if x < THRESHOLDS['severe']
+                else 'Hypoxic' if x < THRESHOLDS['hypoxic']
+                else 'Watch' if x < THRESHOLDS['watch']
+                else 'Normal'
             )
             st.dataframe(forecast_df, use_container_width=True)
 
