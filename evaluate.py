@@ -605,6 +605,12 @@ def main():
         num_workers=0,
     )
 
+    # Debug: Check dataset sizes
+    print(f"Training dataset size: {len(training_dataset)}")
+    print(f"Validation dataset size: {len(val_dl.dataset)}")
+    print(f"Number of train batches: {len(train_dl)}")
+    print(f"Number of val batches: {len(val_dl)}")
+
     # Load model
     print("\n" + "-"*80)
     print("Loading Model")
