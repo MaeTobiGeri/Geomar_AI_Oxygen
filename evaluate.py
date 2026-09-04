@@ -595,6 +595,22 @@ def main():
     train_df, val_df = dataset.split_train_validation(df_labeled, train_ratio=0.8)
     print(f"Train samples: {len(train_df)}, Val samples: {len(val_df)}")
 
+    # Debug: Check for gaps in validation data
+    val_df_sorted = val_df.sort_values('Date').reset_index(drop=True)
+    val_time_diffs = val_df_sorted['Date'].diff()
+    large_gaps = val_time_diffs[val_time_diffs > pd.Timedelta(weeks=2)]
+    print(f"\nValidation data gaps > 2 weeks: {len(large_gaps)}")
+    if len(large_gaps) > 0:
+        print("Gap locations:")
+        for idx in large_gaps.index[:5]:  # Show first 5 gaps
+            print(f"  Between {val_df_sorted.loc[idx-1, 'Date']} and {val_df_sorted.loc[idx, 'Date']} ({val_time_diffs.loc[idx]})")
+
+    # Check Time_Idx continuity
+    if 'Time_Idx' in val_df.columns:
+        time_idx_gaps = val_df_sorted['Time_Idx'].diff()
+        large_time_gaps = time_idx_gaps[time_idx_gaps > 1]
+        print(f"Time_Idx gaps > 1: {len(large_time_gaps)}")
+
     # Create dataloaders
     train_dl, val_dl, training_dataset = dataset.create_dataloaders(
         train_df,
