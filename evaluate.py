@@ -283,47 +283,55 @@ def generate_predictions(
                 print(f"  Debug: y_pred shape = {y_pred.shape}")
                 print(f"  Debug: y_pred type = {type(y_pred)}")
 
-            # y_pred shape: [batch, time_steps, n_quantiles] or [batch, time_steps]
-            # For QuantileLoss with 3 quantiles: shape is [batch, time_steps, 3]
+            # y_pred shape: [batch, decoder_steps, n_quantiles]
+            # y[0] shape: [batch, decoder_steps]
+            # We evaluate on ALL decoder steps (full forecast horizon)
+
             if len(y_pred.shape) == 3 and y_pred.shape[2] == 3:
-                # Extract predictions for first step ahead (index 0 in time dimension)
-                y_pred_p10 = y_pred[:, 0, 0].cpu().numpy()  # P10
-                y_pred_p50 = y_pred[:, 0, 1].cpu().numpy()  # P50 (median)
-                y_pred_p90 = y_pred[:, 0, 2].cpu().numpy()  # P90
+                # Flatten batch and time dimensions: [batch * decoder_steps, quantiles]
+                batch_size, n_steps, n_quantiles = y_pred.shape
+                y_pred_flat = y_pred.reshape(-1, n_quantiles).cpu().numpy()
+                y_pred_p10 = y_pred_flat[:, 0]  # P10
+                y_pred_p50 = y_pred_flat[:, 1]  # P50 (median)
+                y_pred_p90 = y_pred_flat[:, 2]  # P90
             else:
                 # Single prediction per timestep
                 if len(y_pred.shape) >= 2:
-                    y_pred_p50 = y_pred[:, 0].cpu().numpy()
+                    y_pred_p50 = y_pred.reshape(-1).cpu().numpy()
                 else:
                     y_pred_p50 = y_pred.cpu().numpy()
                 y_pred_p10 = y_pred_p50.copy()
                 y_pred_p90 = y_pred_p50.copy()
 
-            # True values - y is tuple of (target, weight)
-            # y[0] shape can be [batch, decoder_steps] or [batch, decoder_steps, 1]
+            # True values - flatten batch and decoder dimensions
             if len(y[0].shape) == 3:
-                y_true = y[0][:, 0, 0].cpu().numpy()  # First decoder step, first target
+                y_true = y[0][:, :, 0].reshape(-1).cpu().numpy()
             elif len(y[0].shape) == 2:
-                y_true = y[0][:, 0].cpu().numpy()  # First decoder step
+                y_true = y[0].reshape(-1).cpu().numpy()
             else:
                 y_true = y[0].cpu().numpy()
 
             # Debug print on first batch
             if len(all_y_true) == 0:
                 print(f"  Debug: y[0] shape = {y[0].shape}")
-                print(f"  Debug: y_true shape = {y_true.shape}")
+                print(f"  Debug: y_true shape after flatten = {y_true.shape}")
+                print(f"  Debug: y_pred_p50 shape = {y_pred_p50.shape}")
 
-            # Extract weights - y[1] contains weights
+            # Extract weights - flatten to match y_true
             if len(y) > 1 and y[1] is not None:
-                # Weights in y[1], shape [batch, decoder_steps] or [batch, decoder_steps, 1]
+                # Weights in y[1], shape [batch, decoder_steps]
                 if len(y[1].shape) == 2:
-                    weights = y[1][:, 0].cpu().numpy()
+                    weights = y[1].reshape(-1).cpu().numpy()
                 elif len(y[1].shape) == 3:
-                    weights = y[1][:, 0, 0].cpu().numpy()
+                    weights = y[1][:, :, 0].reshape(-1).cpu().numpy()
                 else:
                     weights = y[1].cpu().numpy()
             elif 'weight' in x:
-                weights = x['weight'][:, 0].cpu().numpy()
+                # x['weight'] might need similar flattening
+                if len(x['weight'].shape) >= 2:
+                    weights = x['weight'].reshape(-1).cpu().numpy()
+                else:
+                    weights = x['weight'].cpu().numpy()
             else:
                 weights = np.ones_like(y_true)
 
