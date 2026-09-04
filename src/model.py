@@ -142,8 +142,9 @@ def create_trainer(
         callbacks=[early_stop_callback, checkpoint_callback, lr_monitor],
         enable_progress_bar=enable_progress_bar,
         enable_model_summary=enable_model_summary,
-        # Deterministic for reproducibility
-        deterministic=True,
+        # Disable deterministic mode for CUDA compatibility
+        # Some CUDA operations don't have deterministic implementations
+        deterministic=False,
     )
 
     return trainer
