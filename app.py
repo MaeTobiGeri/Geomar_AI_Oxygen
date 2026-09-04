@@ -392,17 +392,21 @@ def main():
 
         # Date selector
         min_date = df_data['Date'].min() + timedelta(weeks=8)  # Need encoder history
+        max_date = df_data['Date'].max()
 
         if validation_mode:
-            # In validation mode, exclude the last 4 weeks to have actual data for comparison
-            max_date = df_data['Date'].max() - timedelta(weeks=4)
             st.info("Validation mode: Select a past date to compare predictions vs actual outcomes")
+            st.caption("Note: Select a date far enough in the past to have actual data for your chosen forecast horizon")
+
+        # Default to a date that allows validation if in validation mode
+        if validation_mode:
+            default_date = (max_date - timedelta(weeks=12)).date()  # 12 weeks before latest
         else:
-            max_date = df_data['Date'].max()
+            default_date = max_date.date()
 
         forecast_date = st.date_input(
             "Forecast from date:",
-            value=max_date.date(),
+            value=default_date,
             min_value=min_date.date(),
             max_value=max_date.date(),
             help="Select a date with sufficient history (at least 8 weeks)"
@@ -413,13 +417,24 @@ def main():
     with col2:
         st.subheader("Forecast Horizon")
 
-        # Horizon control (SPEC.md §10: bounded to reliable range)
+        # Horizon control - extend in validation mode for better evaluation
+        if validation_mode:
+            # Allow longer horizons in validation mode for testing
+            max_horizon = 12
+            default_horizon = 8
+            help_text = "Extended horizon for validation (model trained on 4 weeks, longer forecasts are experimental)"
+        else:
+            # Production mode: use empirically reliable range
+            max_horizon = MAX_HORIZON
+            default_horizon = DEFAULT_HORIZON
+            help_text = f"Forecast horizon bounded to empirically reliable range ({MIN_HORIZON}-{MAX_HORIZON} weeks)"
+
         horizon_weeks = st.slider(
             "Weeks ahead:",
             min_value=MIN_HORIZON,
-            max_value=MAX_HORIZON,
-            value=DEFAULT_HORIZON,
-            help=f"Forecast horizon bounded to empirically reliable range ({MIN_HORIZON}-{MAX_HORIZON} weeks)"
+            max_value=max_horizon,
+            value=default_horizon,
+            help=help_text
         )
 
     # Generate forecast
