@@ -299,18 +299,33 @@ def generate_predictions(
                 y_pred_p10 = y_pred_p50.copy()
                 y_pred_p90 = y_pred_p50.copy()
 
-            # True values and weights
-            y_true = y[0][:, 0, 0].cpu().numpy()  # First target, first step
-
-            # Extract weights if available
-            if hasattr(batch, 'weight'):
-                weights = batch.weight.cpu().numpy()
+            # True values - y is tuple of (target, weight)
+            # y[0] shape can be [batch, decoder_steps] or [batch, decoder_steps, 1]
+            if len(y[0].shape) == 3:
+                y_true = y[0][:, 0, 0].cpu().numpy()  # First decoder step, first target
+            elif len(y[0].shape) == 2:
+                y_true = y[0][:, 0].cpu().numpy()  # First decoder step
             else:
-                # Extract from x if stored there
-                if 'weight' in x:
-                    weights = x['weight'][:, 0].cpu().numpy()
+                y_true = y[0].cpu().numpy()
+
+            # Debug print on first batch
+            if len(all_y_true) == 0:
+                print(f"  Debug: y[0] shape = {y[0].shape}")
+                print(f"  Debug: y_true shape = {y_true.shape}")
+
+            # Extract weights - y[1] contains weights
+            if len(y) > 1 and y[1] is not None:
+                # Weights in y[1], shape [batch, decoder_steps] or [batch, decoder_steps, 1]
+                if len(y[1].shape) == 2:
+                    weights = y[1][:, 0].cpu().numpy()
+                elif len(y[1].shape) == 3:
+                    weights = y[1][:, 0, 0].cpu().numpy()
                 else:
-                    weights = np.ones_like(y_true)
+                    weights = y[1].cpu().numpy()
+            elif 'weight' in x:
+                weights = x['weight'][:, 0].cpu().numpy()
+            else:
+                weights = np.ones_like(y_true)
 
             all_y_true.append(y_true)
             all_y_pred_p50.append(y_pred_p50)
