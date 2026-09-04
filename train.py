@@ -31,8 +31,19 @@ import sys
 from pathlib import Path
 from datetime import datetime
 import lightning.pytorch as pl
+import torch
 
 from src import data_ingestion, pipeline, labeling, features, dataset, model
+
+# Register safe globals for checkpoint loading (PyTorch 2.6+ weights_only security)
+# pytorch-forecasting uses custom classes that need to be allowlisted
+try:
+    from pytorch_forecasting.data.encoders import GroupNormalizer, NaNLabelEncoder
+    from pytorch_forecasting.metrics import QuantileLoss
+    torch.serialization.add_safe_globals([GroupNormalizer, NaNLabelEncoder, QuantileLoss])
+except (ImportError, AttributeError):
+    # Older PyTorch versions don't have add_safe_globals
+    pass
 
 
 # Default configuration (can be overridden by CLI or JSON)
