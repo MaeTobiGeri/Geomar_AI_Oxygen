@@ -138,20 +138,25 @@ def make_prediction(
     # Shape: [n_samples, decoder_length, n_quantiles] where n_quantiles=3 (P10, P50, P90)
     predictions_np = predictions.cpu().numpy()
 
+    # The model can only predict decoder_length steps (typically 4 weeks)
+    # Limit horizon to what the model can actually predict
+    max_decoder_length = predictions_np.shape[1]
+    actual_horizon = min(horizon_weeks, max_decoder_length)
+
     if predictions_np.shape[-1] >= 3:  # Has quantiles
-        p10 = predictions_np[-1, :horizon_weeks, 0]
-        p50 = predictions_np[-1, :horizon_weeks, 1]
-        p90 = predictions_np[-1, :horizon_weeks, 2]
+        p10 = predictions_np[-1, :actual_horizon, 0]
+        p50 = predictions_np[-1, :actual_horizon, 1]
+        p90 = predictions_np[-1, :actual_horizon, 2]
     else:
         # Single point prediction, use as median
-        p50 = predictions_np[-1, :horizon_weeks]
+        p50 = predictions_np[-1, :actual_horizon]
         p10 = p50.copy()
         p90 = p50.copy()
 
-    # Generate forecast dates (weekly)
+    # Generate forecast dates (weekly) - only for what we actually predicted
     forecast_dates = pd.date_range(
         start=forecast_date + timedelta(weeks=1),
-        periods=horizon_weeks,
+        periods=actual_horizon,
         freq='W'
     )
 
@@ -160,7 +165,9 @@ def make_prediction(
         'p10': p10,
         'p50': p50,
         'p90': p90,
-        'forecast_from': forecast_date
+        'forecast_from': forecast_date,
+        'requested_horizon': horizon_weeks,
+        'actual_horizon': actual_horizon
     }
 
 
@@ -452,6 +459,14 @@ def main():
             st.error("Insufficient historical data for this date. Select a later date.")
             st.stop()
 
+        # Warn if requested horizon exceeds model capability
+        if forecast['actual_horizon'] < forecast['requested_horizon']:
+            st.warning(
+                f"Note: Model was trained with decoder_length={forecast['actual_horizon']} weeks. "
+                f"Showing {forecast['actual_horizon']} week forecast (requested {forecast['requested_horizon']} weeks). "
+                f"For longer forecasts, the model would need to be retrained with larger decoder_length."
+            )
+
         # Compute risk metrics (SPEC.md §10)
         risk = compute_hypoxia_risk(
             forecast['p10'],
@@ -518,8 +533,12 @@ def main():
                 import numpy as np
 
                 # Interpolate actual data to match forecast dates
+                # Note: forecast arrays may be shorter than requested horizon_weeks if model has decoder_length limit
+                n_predictions = len(forecast['p50'])
                 actual_values = []
-                for fdate in forecast['dates']:
+                for i, fdate in enumerate(forecast['dates']):
+                    if i >= n_predictions:
+                        break  # Don't go beyond what model predicted
                     closest = actual_data.iloc[(actual_data['Date'] - fdate).abs().argsort()[:1]]
                     if len(closest) > 0 and abs((closest.iloc[0]['Date'] - fdate).days) <= 7:
                         actual_values.append(closest.iloc[0]['O2_umol_L'])
@@ -530,7 +549,7 @@ def main():
                 valid_mask = ~np.isnan(actual_values)
 
                 if valid_mask.sum() > 0:
-                    pred_median = forecast['p50'][valid_mask]
+                    pred_median = forecast['p50'][:len(actual_values)][valid_mask]
                     actual_valid = actual_values[valid_mask]
 
                     mae = mean_absolute_error(actual_valid, pred_median)
@@ -562,8 +581,12 @@ def main():
                     (df_data['Date'] <= forecast_end)
                 ].copy()
 
+                # Only match up to the number of predictions we have
+                n_predictions = len(forecast['p50'])
                 actual_col = []
-                for fdate in forecast['dates']:
+                for i, fdate in enumerate(forecast['dates']):
+                    if i >= n_predictions:
+                        break
                     closest = actual_data.iloc[(actual_data['Date'] - fdate).abs().argsort()[:1]]
                     if len(closest) > 0 and abs((closest.iloc[0]['Date'] - fdate).days) <= 7:
                         actual_col.append(closest.iloc[0]['O2_umol_L'])
