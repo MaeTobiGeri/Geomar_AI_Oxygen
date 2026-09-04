@@ -191,6 +191,7 @@ def compute_hypoxia_risk(p10: np.ndarray, p50: np.ndarray, p90: np.ndarray, thre
     # Risk probability: percentage of forecast horizon at risk
     high_risk_pct = (high_risk_weeks / total_weeks) * 100
     moderate_risk_pct = (moderate_risk_weeks / total_weeks) * 100
+    any_risk_pct = (any_risk_weeks / total_weeks) * 100
 
     return {
         'high_risk_weeks': high_risk_weeks,
@@ -199,6 +200,7 @@ def compute_hypoxia_risk(p10: np.ndarray, p50: np.ndarray, p90: np.ndarray, thre
         'total_weeks': total_weeks,
         'high_risk_pct': high_risk_pct,
         'moderate_risk_pct': moderate_risk_pct,
+        'any_risk_pct': any_risk_pct,
     }
 
 
