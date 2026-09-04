@@ -657,10 +657,28 @@ def main():
     # Model predictions are multi-step (4 decoder steps) which makes alignment complex
     plot_event_studies(df_labeled, episodes, output_dir, max_episodes=6)
 
-    # Save metrics
+    # Save metrics (convert numpy types to Python native types for JSON serialization)
     metrics_path = output_dir / "evaluation_metrics.json"
+
+    def convert_to_python_types(obj):
+        """Recursively convert numpy types to Python native types."""
+        if isinstance(obj, dict):
+            return {k: convert_to_python_types(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [convert_to_python_types(item) for item in obj]
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return obj
+
+    all_metrics_serializable = convert_to_python_types(all_metrics)
+
     with open(metrics_path, 'w') as f:
-        json.dump(all_metrics, f, indent=2)
+        json.dump(all_metrics_serializable, f, indent=2)
 
     print(f"\n{'='*80}")
     print(f"EVALUATION COMPLETE")
