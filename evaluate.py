@@ -254,14 +254,50 @@ def generate_predictions(
                     x[key] = x[key].to(device)
             y = (y[0].to(device), y[1].to(device))
 
-            # Get predictions (returns quantiles: [P10, P50, P90])
-            y_pred = model(x)
+            # Get predictions - TFT returns a dictionary with 'prediction' key
+            output = model(x)
 
-            # Extract predictions for first step ahead (index 0 in time dimension)
-            # Shape: [batch, time_steps, quantiles]
-            y_pred_p10 = y_pred[:, 0, 0].cpu().numpy()  # P10
-            y_pred_p50 = y_pred[:, 0, 1].cpu().numpy()  # P50 (median)
-            y_pred_p90 = y_pred[:, 0, 2].cpu().numpy()  # P90
+            # Debug: print output type and structure on first batch
+            if len(all_y_true) == 0:
+                print(f"  Debug: output type = {type(output)}")
+                if isinstance(output, dict):
+                    print(f"  Debug: output keys = {output.keys()}")
+                elif isinstance(output, tuple):
+                    print(f"  Debug: tuple length = {len(output)}, first element type = {type(output[0])}")
+
+            # Handle different output formats
+            if isinstance(output, dict):
+                y_pred = output['prediction']
+            elif isinstance(output, tuple):
+                # Sometimes returns (prediction, other_outputs)
+                y_pred = output[0]
+            else:
+                y_pred = output
+
+            # Convert to tensor if needed
+            if not isinstance(y_pred, torch.Tensor):
+                y_pred = torch.tensor(y_pred)
+
+            # Debug print shape on first batch
+            if len(all_y_true) == 0:
+                print(f"  Debug: y_pred shape = {y_pred.shape}")
+                print(f"  Debug: y_pred type = {type(y_pred)}")
+
+            # y_pred shape: [batch, time_steps, n_quantiles] or [batch, time_steps]
+            # For QuantileLoss with 3 quantiles: shape is [batch, time_steps, 3]
+            if len(y_pred.shape) == 3 and y_pred.shape[2] == 3:
+                # Extract predictions for first step ahead (index 0 in time dimension)
+                y_pred_p10 = y_pred[:, 0, 0].cpu().numpy()  # P10
+                y_pred_p50 = y_pred[:, 0, 1].cpu().numpy()  # P50 (median)
+                y_pred_p90 = y_pred[:, 0, 2].cpu().numpy()  # P90
+            else:
+                # Single prediction per timestep
+                if len(y_pred.shape) >= 2:
+                    y_pred_p50 = y_pred[:, 0].cpu().numpy()
+                else:
+                    y_pred_p50 = y_pred.cpu().numpy()
+                y_pred_p10 = y_pred_p50.copy()
+                y_pred_p90 = y_pred_p50.copy()
 
             # True values and weights
             y_true = y[0][:, 0, 0].cpu().numpy()  # First target, first step
