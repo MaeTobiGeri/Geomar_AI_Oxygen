@@ -120,21 +120,31 @@ def make_prediction(
 
     # Get predictions
     with torch.no_grad():
-        predictions = model.predict(
+        raw_predictions = model.predict(
             pred_dataset,
             mode="raw",
             return_x=False
         )
 
-    # Extract quantiles: shape [n_samples, decoder_length, n_quantiles]
-    # Take last sample (most recent forecast)
-    if len(predictions.shape) == 3:
-        p10 = predictions[-1, :horizon_weeks, 0].numpy()
-        p50 = predictions[-1, :horizon_weeks, 1].numpy()
-        p90 = predictions[-1, :horizon_weeks, 2].numpy()
+    # Extract quantile predictions from Output object
+    # raw_predictions.prediction is a tensor with shape [batch, time, quantiles]
+    if hasattr(raw_predictions, 'prediction'):
+        predictions = raw_predictions.prediction
     else:
-        # Fallback
-        p50 = predictions[-1, :horizon_weeks].numpy()
+        # Fallback: try to access as dict or direct tensor
+        predictions = raw_predictions if torch.is_tensor(raw_predictions) else raw_predictions['prediction']
+
+    # Convert to numpy and extract quantiles
+    # Shape: [n_samples, decoder_length, n_quantiles] where n_quantiles=3 (P10, P50, P90)
+    predictions_np = predictions.cpu().numpy()
+
+    if predictions_np.shape[-1] >= 3:  # Has quantiles
+        p10 = predictions_np[-1, :horizon_weeks, 0]
+        p50 = predictions_np[-1, :horizon_weeks, 1]
+        p90 = predictions_np[-1, :horizon_weeks, 2]
+    else:
+        # Single point prediction, use as median
+        p50 = predictions_np[-1, :horizon_weeks]
         p10 = p50.copy()
         p90 = p50.copy()
 
