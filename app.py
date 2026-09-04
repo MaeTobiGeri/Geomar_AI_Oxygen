@@ -107,15 +107,21 @@ def make_prediction(
         return None
 
     # Get the most recent data up to forecast_date
-    df_context = df[date_mask].tail(20).copy()  # Use last 20 weeks for context
+    df_context = df[date_mask].copy()
 
-    # Create prediction dataset
-    pred_dataset = dataset.create_validation_dataset(training_dataset, df_context)
+    # Create prediction dataset using from_dataset() method
+    # This ensures the new dataset uses the same parameters as training
+    pred_dataset = training_dataset.__class__.from_dataset(
+        training_dataset,
+        df_context,
+        predict=True,
+        stop_randomization=True
+    )
 
     # Get predictions
     with torch.no_grad():
         predictions = model.predict(
-            pred_dataset.to_dataloader(batch_size=1, train=False, num_workers=0),
+            pred_dataset,
             mode="raw",
             return_x=False
         )
