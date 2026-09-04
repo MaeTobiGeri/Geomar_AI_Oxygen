@@ -204,7 +204,7 @@ def compute_hypoxia_risk(p10: np.ndarray, p50: np.ndarray, p90: np.ndarray, thre
     }
 
 
-def plot_forecast(historical_data: pd.DataFrame, forecast: dict, show_history_weeks: int = 12):
+def plot_forecast(historical_data: pd.DataFrame, forecast: dict, show_history_weeks: int = 12, actual_future: pd.DataFrame = None):
     """Create interactive Plotly forecast visualization.
 
     Per SPEC.md §10: includes threshold lines and hypoxic zone shading.
@@ -213,6 +213,7 @@ def plot_forecast(historical_data: pd.DataFrame, forecast: dict, show_history_we
         historical_data: DataFrame with Date and O2_umol_L columns
         forecast: Dictionary from make_prediction()
         show_history_weeks: Number of weeks of history to show
+        actual_future: Optional DataFrame with actual future data for validation
 
     Returns:
         Plotly figure
@@ -233,9 +234,27 @@ def plot_forecast(historical_data: pd.DataFrame, forecast: dict, show_history_we
         y=hist_data['O2_umol_L'],
         mode='lines+markers',
         name='Historical O₂',
-        line=dict(color='black', width=2),
+        line=dict(color='#1f77b4', width=2),  # Blue color for better visibility
         marker=dict(size=6)
     ))
+
+    # Plot actual future data if provided (for validation)
+    if actual_future is not None:
+        forecast_end = forecast['dates'][-1]
+        actual_data = actual_future[
+            (actual_future['Date'] > forecast_from) &
+            (actual_future['Date'] <= forecast_end)
+        ].copy()
+
+        if len(actual_data) > 0:
+            fig.add_trace(go.Scatter(
+                x=actual_data['Date'],
+                y=actual_data['O2_umol_L'],
+                mode='lines+markers',
+                name='Actual O₂ (Ground Truth)',
+                line=dict(color='green', width=3),
+                marker=dict(size=8, symbol='diamond')
+            ))
 
     # Plot forecast P50 (median)
     fig.add_trace(go.Scatter(
@@ -364,9 +383,22 @@ def main():
     with col1:
         st.subheader("Select Forecast Date")
 
+        # Validation mode toggle
+        validation_mode = st.checkbox(
+            "Validation Mode",
+            value=False,
+            help="Compare predictions against actual historical data for testing"
+        )
+
         # Date selector
         min_date = df_data['Date'].min() + timedelta(weeks=8)  # Need encoder history
-        max_date = df_data['Date'].max()
+
+        if validation_mode:
+            # In validation mode, exclude the last 4 weeks to have actual data for comparison
+            max_date = df_data['Date'].max() - timedelta(weeks=4)
+            st.info("Validation mode: Select a past date to compare predictions vs actual outcomes")
+        else:
+            max_date = df_data['Date'].max()
 
         forecast_date = st.date_input(
             "Forecast from date:",
@@ -451,8 +483,52 @@ def main():
 
         # Plot forecast
         st.subheader("Oxygen Forecast")
-        fig = plot_forecast(df_data, forecast, show_history_weeks=12)
+
+        # In validation mode, pass actual future data for comparison
+        actual_future = df_data if validation_mode else None
+        fig = plot_forecast(df_data, forecast, show_history_weeks=12, actual_future=actual_future)
         st.plotly_chart(fig, use_container_width=True)
+
+        # Show validation metrics if in validation mode
+        if validation_mode:
+            forecast_end = forecast['dates'][-1]
+            actual_data = df_data[
+                (df_data['Date'] > forecast_date) &
+                (df_data['Date'] <= forecast_end)
+            ].copy()
+
+            if len(actual_data) > 0:
+                # Align actual data with forecast dates
+                from sklearn.metrics import mean_squared_error, mean_absolute_error
+                import numpy as np
+
+                # Interpolate actual data to match forecast dates
+                actual_values = []
+                for fdate in forecast['dates']:
+                    closest = actual_data.iloc[(actual_data['Date'] - fdate).abs().argsort()[:1]]
+                    if len(closest) > 0 and abs((closest.iloc[0]['Date'] - fdate).days) <= 7:
+                        actual_values.append(closest.iloc[0]['O2_umol_L'])
+                    else:
+                        actual_values.append(np.nan)
+
+                actual_values = np.array(actual_values)
+                valid_mask = ~np.isnan(actual_values)
+
+                if valid_mask.sum() > 0:
+                    pred_median = forecast['p50'][valid_mask]
+                    actual_valid = actual_values[valid_mask]
+
+                    mae = mean_absolute_error(actual_valid, pred_median)
+                    rmse = np.sqrt(mean_squared_error(actual_valid, pred_median))
+
+                    st.subheader("Validation Metrics")
+                    val_col1, val_col2, val_col3 = st.columns(3)
+                    with val_col1:
+                        st.metric("MAE", f"{mae:.2f} µmol/L", help="Mean Absolute Error")
+                    with val_col2:
+                        st.metric("RMSE", f"{rmse:.2f} µmol/L", help="Root Mean Squared Error")
+                    with val_col3:
+                        st.metric("Valid Points", f"{valid_mask.sum()}/{len(forecast['dates'])}")
 
         # Show forecast table
         with st.expander("Detailed Forecast Data"):
@@ -462,6 +538,25 @@ def main():
                 'P50 (Median)': forecast['p50'],
                 'P90 (High)': forecast['p90'],
             })
+
+            # Add actual values in validation mode
+            if validation_mode:
+                forecast_end = forecast['dates'][-1]
+                actual_data = df_data[
+                    (df_data['Date'] > forecast_date) &
+                    (df_data['Date'] <= forecast_end)
+                ].copy()
+
+                actual_col = []
+                for fdate in forecast['dates']:
+                    closest = actual_data.iloc[(actual_data['Date'] - fdate).abs().argsort()[:1]]
+                    if len(closest) > 0 and abs((closest.iloc[0]['Date'] - fdate).days) <= 7:
+                        actual_col.append(closest.iloc[0]['O2_umol_L'])
+                    else:
+                        actual_col.append(np.nan)
+
+                forecast_df['Actual'] = actual_col
+
             forecast_df['Status'] = forecast_df['P50 (Median)'].apply(
                 lambda x: 'Severe' if x < THRESHOLDS['severe']
                 else 'Hypoxic' if x < THRESHOLDS['hypoxic']
