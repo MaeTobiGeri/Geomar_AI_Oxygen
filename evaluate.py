@@ -371,19 +371,16 @@ def persistence_baseline(y_true: np.ndarray) -> np.ndarray:
 def plot_event_studies(
     df_featured: pd.DataFrame,
     episodes: pd.DataFrame,
-    model_preds: Dict[str, np.ndarray],
     output_dir: Path,
     max_episodes: int = 6
 ):
     """Plot event studies for held-out hypoxic episodes.
 
-    Per SPEC.md §9: show observation vs weighted model for historical episodes
-    to demonstrate tail prediction improvement.
+    Per SPEC.md §9: show historical hypoxic episodes with context.
 
     Args:
-        df_featured: Full featured dataframe with dates
+        df_featured: Full featured dataframe with Date and O2_umol_L columns
         episodes: DataFrame of identified hypoxic episodes
-        model_preds: Dictionary with 'dates', 'y_true', 'y_pred', 'y_persist'
         output_dir: Output directory for plots
         max_episodes: Maximum number of episodes to plot
     """
@@ -398,8 +395,8 @@ def plot_event_studies(
     print(f"Plotting {len(episodes_to_plot)} longest hypoxic episodes")
 
     for idx, episode in episodes_to_plot.iterrows():
-        start = episode['start_date']
-        end = episode['end_date']
+        start = pd.to_datetime(episode['start_date'])
+        end = pd.to_datetime(episode['end_date'])
         duration = episode['duration_weeks']
         min_o2 = episode['min_o2']
 
@@ -407,31 +404,29 @@ def plot_event_studies(
         context_start = start - pd.Timedelta(weeks=8)
         context_end = end + pd.Timedelta(weeks=4)
 
-        # Find indices in prediction arrays
-        dates = model_preds['dates']
-        mask = (dates >= context_start) & (dates <= context_end)
+        # Filter dataframe to context window
+        mask = (df_featured['Date'] >= context_start) & (df_featured['Date'] <= context_end)
+        df_window = df_featured[mask].copy()
 
-        if mask.sum() < 5:  # Skip if too few points
+        if len(df_window) < 5:  # Skip if too few points
+            print(f"  Skipping episode {idx+1}: insufficient data in window")
             continue
-
-        dates_ep = dates[mask]
-        y_true_ep = model_preds['y_true'][mask]
-        y_pred_ep = model_preds['y_pred'][mask]
-        y_persist_ep = model_preds['y_persist'][mask]
 
         # Plot
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        ax.plot(dates_ep, y_true_ep, 'ko-', label='Observed', linewidth=2, markersize=5)
-        ax.plot(dates_ep, y_pred_ep, 'b^-', label='TFT Model', linewidth=1.5, markersize=4, alpha=0.8)
-        ax.plot(dates_ep, y_persist_ep, 'g--', label='Persistence Baseline', linewidth=1.5, alpha=0.6)
+        # Plot observed oxygen levels
+        ax.plot(df_window['Date'], df_window['O2_umol_L'], 'ko-',
+                label='Observed O₂', linewidth=2, markersize=5)
 
         # Threshold lines
-        ax.axhline(y=60, color='orange', linestyle='--', linewidth=2, label='Hypoxic (60 µmol/L)', alpha=0.7)
-        ax.axhline(y=30, color='red', linestyle='--', linewidth=2, label='Severe (30 µmol/L)', alpha=0.7)
+        ax.axhline(y=60, color='orange', linestyle='--', linewidth=2,
+                   label='Hypoxic (60 µmol/L)', alpha=0.7)
+        ax.axhline(y=30, color='red', linestyle='--', linewidth=2,
+                   label='Severe (30 µmol/L)', alpha=0.7)
 
         # Shade hypoxic zone
-        ax.fill_between(dates_ep, 0, 60, color='orange', alpha=0.1)
+        ax.fill_between(df_window['Date'], 0, 60, color='orange', alpha=0.1)
 
         # Shade actual episode period
         ax.axvspan(start, end, color='red', alpha=0.15, label='Episode Period')
@@ -658,16 +653,9 @@ def main():
     all_metrics.update(persist_metrics)
 
     # 4. Event study plots
-    # Combine train + val for full timeline
-    full_dates = pd.concat([train_df['Date'].reset_index(drop=True), val_df['Date'].reset_index(drop=True)])
-    model_preds = {
-        'dates': full_dates.values,
-        'y_true': np.concatenate([train_y_true, val_y_true]),
-        'y_pred': np.concatenate([train_y_pred, val_y_pred]),
-        'y_persist': np.concatenate([train_y_persist, val_y_persist]),
-    }
-
-    plot_event_studies(df_labeled, episodes, model_preds, output_dir, max_episodes=6)
+    # Note: Event studies show historical data only (no model predictions)
+    # Model predictions are multi-step (4 decoder steps) which makes alignment complex
+    plot_event_studies(df_labeled, episodes, output_dir, max_episodes=6)
 
     # Save metrics
     metrics_path = output_dir / "evaluation_metrics.json"
