@@ -137,10 +137,14 @@ def main():
     # workers=True ensures reproducibility across dataloader workers
     pl.seed_everything(args.seed, workers=True)
 
-    # Allow non-deterministic operations for CUDA performance
-    # Some operations (like upsample_linear1d) don't have deterministic GPU implementations
+    # Disable deterministic algorithms for CUDA compatibility
+    # Some CUDA operations (like upsample_linear1d_backward) don't have deterministic implementations
     import torch
+    import os
     torch.use_deterministic_algorithms(False)
+    # Disable cuDNN deterministic mode to allow non-deterministic operations
+    torch.backends.cudnn.deterministic = False
+    torch.backends.cudnn.benchmark = True
 
     # Load hyperparameters from JSON if provided
     if args.load_hyperparameters:
