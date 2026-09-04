@@ -36,11 +36,19 @@ import torch
 from src import data_ingestion, pipeline, labeling, features, dataset, model
 
 # Register safe globals for checkpoint loading (PyTorch 2.6+ weights_only security)
-# pytorch-forecasting uses custom classes that need to be allowlisted
+# pytorch-forecasting and related libraries use custom classes that need to be allowlisted
 try:
+    import pandas as pd
     from pytorch_forecasting.data.encoders import GroupNormalizer, NaNLabelEncoder
     from pytorch_forecasting.metrics import QuantileLoss
-    torch.serialization.add_safe_globals([GroupNormalizer, NaNLabelEncoder, QuantileLoss])
+    from pytorch_forecasting.data.timeseries import TimeSeriesDataSet
+
+    # Add all necessary classes for checkpoint loading
+    safe_classes = [
+        GroupNormalizer, NaNLabelEncoder, QuantileLoss, TimeSeriesDataSet,
+        pd.DataFrame, pd.Series, pd.Index, pd.RangeIndex, pd.DatetimeIndex
+    ]
+    torch.serialization.add_safe_globals(safe_classes)
 except (ImportError, AttributeError):
     # Older PyTorch versions don't have add_safe_globals
     pass
@@ -352,9 +360,11 @@ def main():
     print("\nValidating best checkpoint...")
     best_model_path = Path(args.checkpoint_path) / "best_model.ckpt"
     if best_model_path.exists():
+        # Use weights_only=False since we trust our own checkpoints
         val_results = trainer.validate(
             ckpt_path=str(best_model_path),
-            dataloaders=val_dl
+            dataloaders=val_dl,
+            weights_only=False
         )
         print(f"Best validation loss: {val_results[0]['val_loss']:.4f}")
     else:
