@@ -1,29 +1,3 @@
-"""Training script for weighted hypoxia prediction model.
-
-Implements BUILD_PLAN.md Phase 8: end-to-end training pipeline from data ingestion through
-model training, with fixed checkpoint paths and reproducibility logging.
-
-Runs Phases 2-7:
-  - Phase 2: Data ingestion (ocean + weather)
-  - Phase 3: Weekly resampling and imputation
-  - Phase 4: Hypoxia labeling and sample weighting
-  - Phase 5: Feature engineering
-  - Phase 6: Dataset construction with chronological split
-  - Phase 7: Model training with early stopping
-
-Per SPEC.md §8 and §11, saves checkpoints to a FIXED path (not version_N) and logs
-features/weights used alongside the checkpoint for reproducibility.
-
-Usage:
-    # Train with default hyperparameters
-    python train.py
-
-    # Train with custom hyperparameters
-    python train.py --learning-rate 0.01 --hidden-size 32 --max-epochs 50
-
-    # Load tuned hyperparameters from JSON
-    python train.py --load-hyperparameters tuned_hyperparameters.json
-"""
 
 import argparse
 import json
@@ -56,8 +30,8 @@ except (ImportError, AttributeError):
 
 # Default configuration (can be overridden by CLI or JSON)
 DEFAULT_CONFIG = {
-    "encoder_length": 8,
-    "decoder_length": 4,
+    "encoder_length": 16,
+    "decoder_length": 8,
     "batch_size": 64,
     "max_epochs": 100,
     "patience": 3,  # Early stopping patience (SPEC.md §8)
