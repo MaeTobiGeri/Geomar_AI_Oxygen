@@ -334,13 +334,20 @@ def main():
     print("\nValidating best checkpoint...")
     best_model_path = Path(args.checkpoint_path) / "best_model.ckpt"
     if best_model_path.exists():
-        # Use weights_only=False since we trust our own checkpoints
-        val_results = trainer.validate(
-            ckpt_path=str(best_model_path),
-            dataloaders=val_dl,
-            weights_only=False
-        )
-        print(f"Best validation loss: {val_results[0]['val_loss']:.4f}")
+        try:
+            # Use weights_only=False since we trust our own checkpoints
+            val_results = trainer.validate(
+                ckpt_path=str(best_model_path),
+                dataloaders=val_dl,
+                weights_only=False
+            )
+            print(f"Best validation loss: {val_results[0]['val_loss']:.4f}")
+        except RuntimeError as e:
+            if "size mismatch" in str(e) or "Missing key" in str(e):
+                print("Warning: Checkpoint architecture mismatch (different hyperparameters).")
+                print("Skipping validation. Delete old checkpoint and retrain for full validation.")
+            else:
+                raise
     else:
         print("Warning: Best checkpoint not found, using last checkpoint")
         val_results = trainer.validate(tft, dataloaders=val_dl)

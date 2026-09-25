@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import torch
 
-from src import data_ingestion, pipeline, labeling, features, dataset, model
+from src import data_ingestion, pipeline, labeling, features, dataset, model, visualization
 from pytorch_forecasting import TemporalFusionTransformer
 
 # Hypoxia thresholds from SPEC.md §6.1
@@ -169,6 +169,95 @@ def make_prediction(
         'requested_horizon': horizon_weeks,
         'actual_horizon': actual_horizon
     }
+
+
+def generate_full_dataset_predictions(
+    model: TemporalFusionTransformer,
+    df: pd.DataFrame,
+    training_dataset,
+    encoder_length: int = 8
+):
+    """Generate predictions for the entire dataset (walk-forward prediction).
+
+    Similar to Figure 4 in reference paper: overlay predicted vs actual values
+    across the full time series.
+
+    Args:
+        model: Trained TFT model
+        df: Full dataframe with features
+        training_dataset: TimeSeriesDataSet for prediction
+        encoder_length: Length of encoder sequence
+
+    Returns:
+        DataFrame with dates, actual values, and predictions (P10, P50, P90)
+    """
+    predictions_list = []
+
+    # Walk through dataset, making predictions
+    print("Generating full dataset predictions...")
+
+    # We can only start predictions after we have enough history
+    start_idx = encoder_length
+
+    for i in range(start_idx, len(df)):
+        # Get data up to current point
+        df_context = df.iloc[:i+1].copy()
+
+        # Create prediction dataset
+        try:
+            pred_dataset = training_dataset.__class__.from_dataset(
+                training_dataset,
+                df_context,
+                predict=True,
+                stop_randomization=True
+            )
+
+            # Get prediction for next step only (decoder_length=1)
+            with torch.no_grad():
+                raw_predictions = model.predict(
+                    pred_dataset,
+                    mode="raw",
+                    return_x=False
+                )
+
+            # Extract predictions
+            if hasattr(raw_predictions, 'prediction'):
+                predictions = raw_predictions.prediction
+            else:
+                predictions = raw_predictions if torch.is_tensor(raw_predictions) else raw_predictions['prediction']
+
+            predictions_np = predictions.cpu().numpy()
+
+            # Get the first prediction step for this sample
+            if len(predictions_np) > 0:
+                last_pred = predictions_np[-1, 0, :]  # Last sample, first time step, all quantiles
+
+                if len(last_pred) >= 3:
+                    p10, p50, p90 = last_pred[0], last_pred[1], last_pred[2]
+                else:
+                    p10 = p50 = p90 = last_pred[0] if len(last_pred) > 0 else np.nan
+
+                predictions_list.append({
+                    'Date': df.iloc[i]['Date'],
+                    'Actual': df.iloc[i]['O2_umol_L'],
+                    'P10': p10,
+                    'P50': p50,
+                    'P90': p90
+                })
+
+        except Exception as e:
+            # Skip if prediction fails
+            continue
+
+        if (i - start_idx) % 50 == 0:
+            print(f"  Progress: {i - start_idx}/{len(df) - start_idx} predictions")
+
+    # Convert to DataFrame
+    results_df = pd.DataFrame(predictions_list)
+
+    print(f"Generated {len(results_df)} predictions")
+
+    return results_df
 
 
 def compute_hypoxia_risk(p10: np.ndarray, p50: np.ndarray, p90: np.ndarray, threshold: float = 60.0):
@@ -384,14 +473,19 @@ def main():
     st.sidebar.metric("Data Range", f"{df_data['Date'].min().date()} to {df_data['Date'].max().date()}")
     st.sidebar.metric("Total Samples", len(df_data))
 
-    # Main panel: Forecast controls
-    col1, col2 = st.columns([2, 1])
+    # Tabs for different views
+    tab1, tab2 = st.tabs(["📈 Forecast Mode", "📊 Full Dataset Analysis"])
 
-    with col1:
-        st.subheader("Select Forecast Date")
+    # TAB 1: Forecast Mode
+    with tab1:
+        # Main panel: Forecast controls
+        col1, col2 = st.columns([2, 1])
 
-        # Validation mode toggle
-        validation_mode = st.checkbox(
+        with col1:
+            st.subheader("Select Forecast Date")
+
+            # Validation mode toggle
+            validation_mode = st.checkbox(
             "Validation Mode",
             value=False,
             help="Compare predictions against actual historical data for testing"
@@ -602,6 +696,69 @@ def main():
                 else 'Normal'
             )
             st.dataframe(forecast_df, use_container_width=True)
+
+    # Full Dataset Analysis Section
+    st.markdown("---")
+    st.header("📊 Full Dataset Analysis")
+
+    st.markdown("""
+    **Note**: To generate full dataset predictions (like Figure 4 in reference papers),
+    run the standalone script:
+    ```bash
+    python generate_full_predictions.py
+    ```
+    This will create comprehensive visualizations and metrics in `outputs/full_predictions/`.
+    """)
+
+    # Check if predictions exist and offer to display them
+    predictions_path = Path("outputs/full_predictions/predictions.csv")
+    interactive_plot_path = Path("outputs/full_predictions/full_dataset_predictions_interactive.html")
+
+    if predictions_path.exists():
+        st.success("✓ Full dataset predictions found!")
+
+        if st.button("Load Full Dataset Predictions"):
+            # Load predictions
+            predictions_df = pd.read_csv(predictions_path)
+            predictions_df['Date'] = pd.to_datetime(predictions_df['Date'])
+
+            # Display interactive plot if available
+            if interactive_plot_path.exists():
+                st.subheader("Predictions vs Actual (Full Dataset)")
+
+                # Read and display HTML plot
+                with open(interactive_plot_path, 'r') as f:
+                    html_content = f.read()
+                st.components.v1.html(html_content, height=600, scrolling=True)
+
+            # Show summary statistics
+            st.subheader("Summary Statistics")
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                mae = np.abs(predictions_df['Actual'] - predictions_df['P50']).mean()
+                st.metric("MAE", f"{mae:.2f} µmol/L")
+
+            with col2:
+                rmse = np.sqrt(((predictions_df['Actual'] - predictions_df['P50'])**2).mean())
+                st.metric("RMSE", f"{rmse:.2f} µmol/L")
+
+            with col3:
+                # PICP
+                covered = ((predictions_df['Actual'] >= predictions_df['P10']) &
+                          (predictions_df['Actual'] <= predictions_df['P90']))
+                picp = covered.mean()
+                st.metric("PICP (P10-P90)", f"{picp:.1%}")
+
+            with col4:
+                st.metric("Predictions", len(predictions_df))
+
+            # Show data table
+            with st.expander("View Prediction Data"):
+                st.dataframe(predictions_df, use_container_width=True)
+    else:
+        st.info("No full dataset predictions found. Run `python generate_full_predictions.py` to generate them.")
 
     # Footer
     st.markdown("---")
