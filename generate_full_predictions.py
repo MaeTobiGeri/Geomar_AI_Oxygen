@@ -208,10 +208,24 @@ def main():
     # Print metrics
     metrics.print_evaluation_report(evaluation_results)
 
-    # Save metrics
+    # Save metrics (convert numpy types to native Python types)
     metrics_path = output_path / "metrics.json"
+
+    def convert_to_native(obj):
+        """Recursively convert numpy types to native Python types"""
+        import numpy as np
+        if isinstance(obj, dict):
+            return {k: convert_to_native(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_to_native(item) for item in obj]
+        elif isinstance(obj, (np.integer, np.floating)):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return obj
+
     with open(metrics_path, 'w') as f:
-        json.dump(evaluation_results, f, indent=2)
+        json.dump(convert_to_native(evaluation_results), f, indent=2)
     print(f"\nMetrics saved to: {metrics_path}")
 
     # Generate visualizations
