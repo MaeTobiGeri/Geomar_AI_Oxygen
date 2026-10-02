@@ -116,6 +116,8 @@ def test_engineer_features_includes_all_features():
         "Temp_C": [10.0, 11.0, 12.0, 13.0, 14.0, 8.0, 8.5, 9.0, 9.5, 10.0],
         "O2_umol_L": [300.0, 310.0, 320.0, 330.0, 340.0, 250.0, 260.0, 255.0, 240.0, 230.0],
         "Chl_a": [1.0, 2.0, 3.0, 4.0, 5.0, 1.5, 2.5, 3.5, 4.5, 5.5],
+        "NO3": [2.0, 2.5, 3.0, 3.5, 4.0, 2.2, 2.7, 3.2, 3.7, 4.2],
+        "PO4": [0.5, 0.6, 0.7, 0.8, 0.9, 0.55, 0.65, 0.75, 0.85, 0.95],
         "Wind_Speed_ms": [5.0, 6.0, 7.0, 8.0, 9.0, 5.0, 6.0, 7.0, 8.0, 9.0],
         "Wind_Dir_deg": [180.0, 190.0, 200.0, 210.0, 220.0, 180.0, 190.0, 200.0, 210.0, 220.0],
     })
@@ -134,13 +136,11 @@ def test_engineer_features_includes_all_features():
     if features.INCLUDE_O2_DERIVATIVE:
         assert "O2_Derivative_1W" in result.columns
 
-    # Candidate features
-    assert "Wind_Dir_deg" in result.columns  # Raw direction preserved
-    assert "Wind_Mixing_Energy" in result.columns
-    assert "Chl_a_lag_1W" in result.columns
-    assert "Chl_a_lag_2W" in result.columns
-    assert "Chl_a_lag_3W" in result.columns
-    assert "Chl_a_lag_4W" in result.columns
+    # Depth 1 lagged features (representing dead organic material)
+    assert "Depth1_Chl_a_lag4W" in result.columns
+    assert "Depth1_Nitrat_lag4W" in result.columns
+    assert "Depth1_Phosphat_lag4W" in result.columns
+    assert "Depth1_Temp_lag4W" in result.columns
 
 
 def test_include_o2_derivative_flag():
@@ -153,6 +153,8 @@ def test_include_o2_derivative_flag():
         "Temp_C": [10.0, 11.0, 12.0, 8.0, 8.5, 9.0],
         "O2_umol_L": [300.0, 310.0, 320.0, 250.0, 260.0, 270.0],
         "Chl_a": [1.0, 2.0, 3.0, 1.5, 2.5, 3.5],
+        "NO3": [2.0, 2.5, 3.0, 2.2, 2.7, 3.2],
+        "PO4": [0.5, 0.6, 0.7, 0.55, 0.65, 0.75],
         "Wind_Speed_ms": [5.0, 6.0, 7.0, 5.0, 6.0, 7.0],
         "Wind_Dir_deg": [180.0, 190.0, 200.0, 180.0, 190.0, 200.0],
     })
