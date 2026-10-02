@@ -71,14 +71,21 @@ def objective(trial: optuna.Trial) -> float:
     train_df, val_df = dataset.split_train_validation(df_labeled, train_ratio=0.8)
 
     # Create dataloaders (Phase 6)
-    train_dl, val_dl, training_dataset = dataset.create_dataloaders(
-        train_df,
-        val_df,
-        batch_size=batch_size,
-        encoder_length=encoder_length,
-        decoder_length=decoder_length,
-        num_workers=0,  # Single process for Optuna
-    )
+    try:
+        train_dl, val_dl, training_dataset = dataset.create_dataloaders(
+            train_df,
+            val_df,
+            batch_size=batch_size,
+            encoder_length=encoder_length,
+            decoder_length=decoder_length,
+            num_workers=0,  # Single process for Optuna
+        )
+    except AssertionError as e:
+        # Handle cases where encoder/decoder length is incompatible with validation set size
+        if "filters should not remove entries all entries" in str(e):
+            print(f"[Trial {trial.number}] Skipping: encoder_length={encoder_length} too large for validation set")
+            raise optuna.TrialPruned()
+        raise
 
     # Create model (Phase 7)
     tft = model.create_tft_model(training_dataset, hyperparameters=hyperparameters)
