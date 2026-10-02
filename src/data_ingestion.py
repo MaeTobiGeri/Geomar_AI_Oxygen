@@ -46,8 +46,6 @@ CHLOROPHYLL_COLUMNS = {
 def _load_old_ocean_data() -> pd.DataFrame:
     df = pd.read_csv(DATA_DIR / "BoknisEck_1957-2014.csv", sep=";", skiprows=31)
     df = df[list(OLD_OCEAN_COLUMNS.keys())].rename(columns=OLD_OCEAN_COLUMNS)
-    # This file reports oxygen in µmol/kg; the 2015-2023 file reports µmol/L directly.
-    # Seawater density ~1.015 kg/L converts the two onto the same unit (SPEC.md §3).
     df["O2_umol_L"] = df["O2_raw"] * 1.015
     return df.drop(columns="O2_raw")
 
@@ -77,8 +75,6 @@ def _load_ocean_data() -> pd.DataFrame:
 
 
 def _fetch_schoenhagen_weather() -> pd.DataFrame:
-    # DWD's "recent" period is a rolling window, so a cached fetch can go stale for the
-    # most recent ~500 days. Good enough for this project: delete the cache file to refresh.
     if WEATHER_CACHE_PATH.exists():
         return pd.read_csv(WEATHER_CACHE_PATH, parse_dates=["Date"])
 
@@ -105,8 +101,6 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
 
     daily = hourly.set_index("Date").resample("D").mean().reset_index()
 
-    # Speed + direction is unusable to a model as-is (direction wraps at 360°); east/north
-    # wind components let the model see it as an ordinary continuous quantity.
     wind_dir_rad = np.radians(daily["Wind_Dir_deg"])
     daily["Wind_U"] = -daily["Wind_Speed_ms"] * np.sin(wind_dir_rad)
     daily["Wind_V"] = -daily["Wind_Speed_ms"] * np.cos(wind_dir_rad)
@@ -118,13 +112,58 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
     return daily
 
 
-def load_and_clean_boknis_data() -> pd.DataFrame:
+def load_and_clean_boknis_data(
+    max_gap_days: int = 60,
+    required_columns: list[str] | None = None,
+) -> pd.DataFrame:
     ocean = _load_ocean_data().sort_values("Date")
     weather = _fetch_schoenhagen_weather().sort_values("Date")
 
-    # Ensure both Date columns have the same datetime dtype (fix for pandas version differences)
     ocean["Date"] = pd.to_datetime(ocean["Date"]).dt.as_unit("ns")
     weather["Date"] = pd.to_datetime(weather["Date"]).dt.as_unit("ns")
 
-    combined = pd.merge_asof(ocean, weather, on="Date", direction="nearest", tolerance=pd.Timedelta("3 days"))
-    return combined.sort_values(["Date", "Depth_m"]).reset_index(drop=True)
+    combined = pd.merge_asof(
+        ocean, weather, on="Date", direction="nearest", tolerance=pd.Timedelta("3 days")
+    )
+
+    if required_columns is None:
+        required_columns = [c for c in combined.columns if c != "Date"]
+    combined = (
+        combined.dropna(subset=required_columns)
+        .sort_values(["Date", "Depth_m"])
+        .reset_index(drop=True)
+    )
+    
+    days_in_year = np.where(combined["Date"].dt.is_leap_year, 366, 365)
+    day_of_year = combined["Date"].dt.dayofyear
+    combined["Season_sin"] = np.sin(2 * np.pi * day_of_year / days_in_year)
+    combined["Season_cos"] = np.cos(2 * np.pi * day_of_year / days_in_year)
+
+    combined["Years_since_start"] = (combined["Date"] - combined["Date"].min()).dt.days / 365.25
+
+    dates = pd.Series(combined["Date"].unique()).sort_values().reset_index(drop=True)
+    gap_days = dates.diff().dt.days
+    lookup = pd.DataFrame(
+        {
+            "Date": dates,
+            "Days_since_prev": gap_days.fillna(0),
+            "Segment_ID": (gap_days > max_gap_days).cumsum(),
+        }
+    )
+    combined = combined.merge(lookup, on="Date", how="left")
+
+    return combined
+
+
+def make_windows(df: pd.DataFrame, feature_cols: list[str], target_cols: list[str], window: int = 6):
+    X, y = [], []
+    for _, g in df.groupby(["Segment_ID", "Depth_m"]):
+        g = g.sort_values("Date")
+        if len(g) <= window:
+            continue
+        feats = g[feature_cols].to_numpy()
+        targs = g[target_cols].to_numpy()
+        for i in range(len(g) - window):
+            X.append(feats[i : i + window])
+            y.append(targs[i + window])
+    return np.array(X), np.array(y)
