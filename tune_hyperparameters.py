@@ -43,7 +43,8 @@ def objective(trial: optuna.Trial) -> float:
     }
 
     # Suggest dataset parameters
-    encoder_length = trial.suggest_int("encoder_length", 4, 16, step=2)
+    # Minimum encoder_length increased to 12 to accommodate 4-week lag features
+    encoder_length = trial.suggest_int("encoder_length", 12, 20, step=2)
     decoder_length = trial.suggest_int("decoder_length", 2, 8, step=2)
     batch_size = trial.suggest_categorical("batch_size", [32, 64, 128])
 
