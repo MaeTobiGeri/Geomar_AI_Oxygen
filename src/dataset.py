@@ -43,7 +43,7 @@ def create_training_dataset(
         time_varying_unknown_reals = [
             "Temp_C", "Salinity", "NO2", "Silicate",
             "Surface_Temp_C", "Surface_O2_umol_L",
-            "Depth1_Chl_a_lag4W", "Depth1_NO3_lag4W", "Depth1_PO4_lag4W", "Depth1_Temp_lag4W",
+            "Depth1_Chl_a_lag4W", "Depth1_Nitrat_lag4W", "Depth1_Phosphat_lag4W", "Depth1_Temp_lag4W",
             "Vertical_Temp_Grad", "Vertical_O2_Grad",
         ]
 
