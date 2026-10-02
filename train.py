@@ -126,34 +126,25 @@ def main():
 
     args = parser.parse_args()
 
-    # Set random seed for reproducibility
-    # workers=True ensures reproducibility across dataloader workers
     pl.seed_everything(args.seed, workers=True)
 
-    # Disable deterministic algorithms for CUDA compatibility
-    # Some CUDA operations (like upsample_linear1d_backward) don't have deterministic implementations
     import torch
     import os
     torch.use_deterministic_algorithms(False)
-    # Disable cuDNN deterministic mode to allow non-deterministic operations
     torch.backends.cudnn.deterministic = False
     torch.backends.cudnn.benchmark = True
 
-    # Load hyperparameters from JSON if provided
     if args.load_hyperparameters:
         print(f"Loading hyperparameters from: {args.load_hyperparameters}")
         with open(args.load_hyperparameters, "r") as f:
             tuned_config = json.load(f)
             tuned_hyperparameters = tuned_config["hyperparameters"]
 
-        # Override with JSON values (but allow CLI to override JSON)
         for key, value in tuned_hyperparameters.items():
             arg_name = key.replace("_", "-")
             if not hasattr(args, key) or getattr(args, key.replace("-", "_")) is None:
-                # Map JSON keys to argparse attribute names
                 setattr(args, key, value)
 
-    # Build hyperparameters dict (merge CLI args with defaults)
     hyperparameters = {}
     for key in ["hidden_size", "attention_head_size", "dropout", "hidden_continuous_size",
                 "learning_rate", "lstm_layers", "gradient_clip_val"]:
@@ -161,7 +152,6 @@ def main():
         if value is not None:
             hyperparameters[key] = value
 
-    # If no hyperparameters specified, use defaults from model.py
     if not hyperparameters:
         hyperparameters = model.DEFAULT_HYPERPARAMETERS.copy()
 
@@ -182,8 +172,6 @@ def main():
     print(f"  Max epochs: {args.max_epochs}")
     print(f"  Early stopping patience: {args.patience}")
     print(f"  Checkpoint path: {args.checkpoint_path}")
-
-    # Phase 2: Data ingestion
     print("\n" + "-"*80)
     print("Phase 2: Data Ingestion")
     print("-"*80)
@@ -191,28 +179,24 @@ def main():
     print(f"Ocean + weather data loaded and merged: {len(df_combined)} rows")
     print(f"  Date range: {df_combined['Date'].min()} to {df_combined['Date'].max()}")
 
-    # Phase 3: Weekly resampling and imputation
     print("\n" + "-"*80)
     print("Phase 3: Weekly Resampling & Imputation")
     print("-"*80)
     df_weekly = pipeline.prepare_weekly_series(df_combined)
     print(f"Weekly series: {len(df_weekly)} rows")
 
-    # Phase 4: Hypoxia labeling and sample weighting
     print("\n" + "-"*80)
     print("Phase 4: Hypoxia Labeling & Sample Weighting")
     print("-"*80)
     df_25m = labeling.select_target_series(df_weekly)
     print(f"25m target series: {len(df_25m)} rows")
 
-    # Phase 5: Feature engineering
     print("\n" + "-"*80)
     print("Phase 5: Feature Engineering")
     print("-"*80)
     df_features = features.engineer_features(df_25m, df_weekly)
     print(f"Engineered features: {len(df_features.columns)} columns")
 
-    # Get list of features for metadata logging
     feature_cols = [col for col in df_features.columns
                     if col not in ["Date", "Depth_m", "Time_Idx", "O2_umol_L", "sample_weight",
                                    "oxygen_deficit", "month_sin", "month_cos"]]

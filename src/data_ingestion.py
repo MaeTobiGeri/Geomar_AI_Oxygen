@@ -87,11 +87,34 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
         periods=["historical", "recent"],
     ).filter_by_station_id(DWD_STATION_ID)
 
+    stations = request.df.to_pandas()
+    print(f"[weather] stations matched: {len(stations)}")
+
     raw = request.values.all().df.to_pandas()
-    hourly = raw.pivot_table(index="date", columns="parameter", values="value", observed=True).reset_index()
+    print(f"[weather] raw shape: {raw.shape}, columns: {list(raw.columns)}")
+
+    if raw.empty:
+        raise RuntimeError(
+            f"DWD returned no data for station {DWD_STATION_ID}. "
+            "Check the station ID and that it has hourly wind and air temperature."
+        )
+
+    raw.columns = [c.lower() for c in raw.columns]
+
+    date_col = next((c for c in ("date", "timestamp", "datetime") if c in raw.columns), None)
+    if date_col is None:
+        raise RuntimeError(f"No date column found in DWD result: {list(raw.columns)}")
+
+    if "parameter" in raw.columns:
+        hourly = raw.pivot_table(
+            index=date_col, columns="parameter", values="value", observed=True
+        ).reset_index()
+    else:  
+        hourly = raw.copy()
+
     hourly = hourly.rename(
         columns={
-            "date": "Date",
+            date_col: "Date",
             "wind_speed": "Wind_Speed_ms",
             "wind_direction": "Wind_Dir_deg",
             "temperature_air_mean_2m": "Air_Temp_C",
@@ -99,7 +122,8 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
     )
     hourly["Date"] = pd.to_datetime(hourly["Date"]).dt.tz_localize(None)
 
-    daily = hourly.set_index("Date").resample("D").mean().reset_index()
+    daily = hourly.set_index("Date")[["Wind_Speed_ms", "Wind_Dir_deg", "Air_Temp_C"]]
+    daily = daily.resample("D").mean().reset_index()
 
     wind_dir_rad = np.radians(daily["Wind_Dir_deg"])
     daily["Wind_U"] = -daily["Wind_Speed_ms"] * np.sin(wind_dir_rad)
