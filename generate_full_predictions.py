@@ -1,3 +1,19 @@
+"""Generate full dataset predictions for visualization.
+
+Creates a comprehensive prediction vs actual overlay plot similar to Figure 4
+in the reference paper. This is a standalone script that saves results for
+later visualization in the dashboard.
+
+Gaps in the data (rows dropped because of missing values) are NOT drawn as
+empty stretches. The x-axis is "compressed": every row gets the next free
+position, so the segments sit directly next to each other. A thin dotted line
+marks every place where time was skipped. Training and validation rows are
+shaded in different colours.
+
+Usage:
+    python generate_full_predictions.py [--checkpoint-path PATH] [--output-dir DIR]
+"""
+
 import argparse
 import json
 import sys
@@ -27,6 +43,7 @@ except (ImportError, AttributeError):
 
 
 SPLIT_COLORS = {"training": "tab:blue", "validation": "tab:orange"}
+PLOTLY_SPLIT_COLORS = {"training": "#1f77b4", "validation": "#ff7f0e"}
 
 
 def find_gap_positions(dates: pd.Series, gap_threshold_days: int) -> list:
@@ -125,7 +142,7 @@ def plot_compressed_predictions_interactive(df, gap_positions, title):
     for start, end, label in split_spans(df["Split"]):
         fig.add_vrect(
             x0=start - 0.5, x1=end + 0.5,
-            fillcolor=SPLIT_COLORS.get(label, "gray"), opacity=0.10,
+            fillcolor=PLOTLY_SPLIT_COLORS.get(label, "gray"), opacity=0.10,
             layer="below", line_width=0,
             annotation_text=f"{label} data", annotation_position="top left",
         )
