@@ -79,11 +79,41 @@ def add_chlorophyll_lags(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_depth1_features_lagged(df_25m: pd.DataFrame, df_all_depths: pd.DataFrame) -> pd.DataFrame:
+    """Add depth 1 measurements (Chl_a, NO3, PO4, Temp) with 1-month (4-week) lag.
+
+    This captures dead organic material indicators that affect oxygen levels at depth 25m.
+    The 4-week lag represents the time for material to sink and decompose.
+
+    Args:
+        df_25m: 25m target series
+        df_all_depths: All depth measurements
+
+    Returns:
+        df_25m with added lagged depth 1 features
+    """
+    df_1m = df_all_depths[df_all_depths["Depth_m"] == 1.0].set_index("Date")
+
+    df_25m = df_25m.copy()
+    df_25m = df_25m.set_index("Date")
+
+    # Reindex depth 1 measurements onto 25m dates, then apply 4-week lag
+    # This gives us depth 1 values from 1 month earlier
+    df_25m["Depth1_Chl_a_lag4W"] = df_1m["Chl_a"].reindex(df_25m.index).shift(periods=4)
+    df_25m["Depth1_NO3_lag4W"] = df_1m["NO3"].reindex(df_25m.index).shift(periods=4)
+    df_25m["Depth1_PO4_lag4W"] = df_1m["PO4"].reindex(df_25m.index).shift(periods=4)
+    df_25m["Depth1_Temp_lag4W"] = df_1m["Temp_C"].reindex(df_25m.index).shift(periods=4)
+
+    return df_25m.reset_index()
+
+
 def engineer_features(df_25m: pd.DataFrame, df_all_depths: pd.DataFrame) -> pd.DataFrame:
     """Apply all feature engineering to the 25 m target series: surface readings,
-    vertical gradients, optional O2 derivative, and candidate features for forward
-    selection (wind direction/mixing, chlorophyll lags). Returns the 25 m dataframe
-    with engineered features appended."""
+    vertical gradients, optional O2 derivative, and depth 1 lagged features.
+
+    Modified to exclude weather features and use depth 1 measurements with 1-month lag
+    for Chl_a, NO3, PO4, and Temp to better represent dead organic material.
+    Returns the 25 m dataframe with engineered features appended."""
 
     df = add_surface_readings(df_25m, df_all_depths)
     df = add_vertical_gradients(df)
@@ -91,10 +121,8 @@ def engineer_features(df_25m: pd.DataFrame, df_all_depths: pd.DataFrame) -> pd.D
     if INCLUDE_O2_DERIVATIVE:
         df = add_o2_derivative(df)
 
-    # Candidate features for forward selection (SPEC.md §5)
-    df = add_wind_direction_raw(df)
-    df = add_wind_mixing_energy(df)
-    df = add_chlorophyll_lags(df)
+    # Add depth 1 features with 1-month lag (representing dead material)
+    df = add_depth1_features_lagged(df, df_all_depths)
 
     return df
 

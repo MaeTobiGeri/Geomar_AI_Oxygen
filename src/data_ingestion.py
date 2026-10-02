@@ -1,5 +1,3 @@
-"""Load and harmonize the raw Boknis Eck ocean data and DWD weather data.
-"""
 
 from pathlib import Path
 
