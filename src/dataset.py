@@ -41,15 +41,24 @@ def create_training_dataset(
 
     if time_varying_unknown_reals is None:
         time_varying_unknown_reals = [
-            "Temp_C", "Salinity", "NO2", "Silicate",
+            # Core physical measurements at 25m
+            "Temp_C", "Salinity", "NO3", "NO2", "PO4", "Silicate",
+            # Weather variables
+            "Air_Temp_C", "Wind_Speed_ms", "Wind_Dir_deg", "Wind_U", "Wind_V",
+            # Temporal features from data ingestion
+            "Season_sin", "Season_cos", "Years_since_start", "Days_since_prev", "Segment_ID",
+            # Surface readings (1m depth)
             "Surface_Temp_C", "Surface_O2_umol_L",
-            "Depth1_Chl_a_lag4W", "Depth1_Nitrat_lag4W", "Depth1_Phosphat_lag4W", "Depth1_Temp_lag4W",
+            # Vertical gradients
             "Vertical_Temp_Grad", "Vertical_O2_Grad",
+            # Depth 1 lagged features (2-week lag)
+            "Depth1_Chl_a_lag2W", "Depth1_Nitrat_lag2W", "Depth1_Phosphat_lag2W", "Depth1_Temp_lag2W",
         ]
 
         if "O2_Derivative_1W" in df.columns:
             time_varying_unknown_reals.append("O2_Derivative_1W")
 
+        # Filter to only columns actually present in df
         time_varying_unknown_reals = [
             col for col in time_varying_unknown_reals if col in df.columns
         ]

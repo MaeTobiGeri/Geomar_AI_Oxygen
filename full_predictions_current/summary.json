@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-10-02T16:02:57.830182",
+  "checkpoint_path": "/content/drive/MyDrive/Geomar_Checkpoints/best_model.ckpt",
+  "num_predictions": 184,
+  "date_range": {
+    "start": "1995-09-18 00:00:00",
+    "end": "2021-06-14 00:00:00"
+  },
+  "split": {
+    "train_split_ratio": 0.8,
+    "training_rows": 152,
+    "validation_rows": 32
+  },
+  "gaps": {
+    "threshold_days": 14,
+    "count": 148
+  },
+  "metrics_summary": {
+    "mae": 79.51060081434511,
+    "rmse": 103.19803134567685,
+    "mape": 5276064452.115102,
+    "picp": 0.782608695652174
+  }
+}

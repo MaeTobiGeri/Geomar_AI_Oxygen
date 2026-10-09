@@ -30,8 +30,8 @@ except (ImportError, AttributeError):
 
 # Default configuration (can be overridden by CLI or JSON)
 DEFAULT_CONFIG = {
-    "encoder_length": 16,
-    "decoder_length": 8,
+    "encoder_length": 8,  # Reduced from 16 to minimize data loss
+    "decoder_length": 4,  # Reduced from 8 to match encoder reduction
     "batch_size": 64,
     "max_epochs": 100,
     "patience": 3,  # Early stopping patience (SPEC.md §8)
@@ -197,10 +197,12 @@ def main():
     df_features = features.engineer_features(df_25m, df_weekly)
     print(f"Engineered features: {len(df_features.columns)} columns")
 
+    # Exclude non-feature columns (Date, Depth_m, Time_Idx, target, weights, labels)
+    # Note: month_sin/month_cos are used as time_varying_known_reals in dataset.py
     feature_cols = [col for col in df_features.columns
                     if col not in ["Date", "Depth_m", "Time_Idx", "O2_umol_L", "sample_weight",
                                    "oxygen_deficit", "month_sin", "month_cos"]]
-    print(f"Feature columns: {', '.join(feature_cols)}")
+    print(f"Feature columns ({len(feature_cols)}): {', '.join(sorted(feature_cols))}")
 
     # Label hypoxia risk
     df_labeled = labeling.label_hypoxia_risk(df_features)

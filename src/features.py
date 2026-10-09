@@ -83,16 +83,16 @@ def add_depth1_features_lagged(df_25m: pd.DataFrame, df_all_depths: pd.DataFrame
     df_25m = df_25m.copy()
     df_25m = df_25m.set_index("Date")
 
-    # Reindex depth 1 measurements onto 25m dates, then apply 4-week lag
-    # This gives us depth 1 values from 1 month earlier
+    # Reindex depth 1 measurements onto 25m dates, then apply 2-week lag
+    # Reduced from 4 weeks to minimize data loss while still capturing delayed effects
     if "Chl_a" in df_1m.columns:
-        df_25m["Depth1_Chl_a_lag4W"] = df_1m["Chl_a"].reindex(df_25m.index).shift(periods=4)
+        df_25m["Depth1_Chl_a_lag2W"] = df_1m["Chl_a"].reindex(df_25m.index).shift(periods=2)
     if "NO3" in df_1m.columns:
-        df_25m["Depth1_Nitrat_lag4W"] = df_1m["NO3"].reindex(df_25m.index).shift(periods=4)
+        df_25m["Depth1_Nitrat_lag2W"] = df_1m["NO3"].reindex(df_25m.index).shift(periods=2)
     if "PO4" in df_1m.columns:
-        df_25m["Depth1_Phosphat_lag4W"] = df_1m["PO4"].reindex(df_25m.index).shift(periods=4)
+        df_25m["Depth1_Phosphat_lag2W"] = df_1m["PO4"].reindex(df_25m.index).shift(periods=2)
     if "Temp_C" in df_1m.columns:
-        df_25m["Depth1_Temp_lag4W"] = df_1m["Temp_C"].reindex(df_25m.index).shift(periods=4)
+        df_25m["Depth1_Temp_lag2W"] = df_1m["Temp_C"].reindex(df_25m.index).shift(periods=2)
 
     return df_25m.reset_index()
 
@@ -101,8 +101,12 @@ def engineer_features(df_25m: pd.DataFrame, df_all_depths: pd.DataFrame) -> pd.D
     """Apply all feature engineering to the 25 m target series: surface readings,
     vertical gradients, optional O2 derivative, and depth 1 lagged features.
 
-    Modified to exclude weather features and use depth 1 measurements with 1-month lag
-    for Chl_a, Nitrat, Phosphat, and Temp to better represent dead organic material.
+    Modified to use depth 1 measurements with 2-week lag for Chl_a, Nitrat, Phosphat,
+    and Temp to capture delayed effects while minimizing data loss.
+
+    Note: Chl_a at 25m depth is excluded from features due to poor coverage (43%),
+    but Depth1_Chl_a_lag2W from 1m depth (63% coverage) is included.
+
     Returns the 25 m dataframe with engineered features appended."""
 
     df = add_surface_readings(df_25m, df_all_depths)
@@ -111,8 +115,12 @@ def engineer_features(df_25m: pd.DataFrame, df_all_depths: pd.DataFrame) -> pd.D
     if INCLUDE_O2_DERIVATIVE:
         df = add_o2_derivative(df)
 
-    # Add depth 1 features with 1-month lag (representing dead material)
+    # Add depth 1 features with 2-week lag
     df = add_depth1_features_lagged(df, df_all_depths)
+
+    # Drop Chl_a at 25m if it exists (poor coverage: 43%)
+    if "Chl_a" in df.columns:
+        df = df.drop(columns=["Chl_a"])
 
     return df
 

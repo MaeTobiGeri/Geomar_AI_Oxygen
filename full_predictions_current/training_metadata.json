@@ -1,0 +1,73 @@
+{
+  "training_date": "2026-10-02T16:01:00.832050",
+  "hyperparameters": {
+    "hidden_size": 8,
+    "attention_head_size": 4,
+    "dropout": 0.21205720315428514,
+    "hidden_continuous_size": 24,
+    "learning_rate": 0.034877126245459314,
+    "lstm_layers": 1,
+    "gradient_clip_val": 0.05211124595788264
+  },
+  "features": [
+    "Temp_C",
+    "Salinity",
+    "NO3",
+    "NO2",
+    "PO4",
+    "Silicate",
+    "Chl_a",
+    "Air_Temp_C",
+    "Wind_Speed_ms",
+    "Wind_Dir_deg",
+    "Wind_U",
+    "Wind_V",
+    "Season_sin",
+    "Season_cos",
+    "Years_since_start",
+    "Days_since_prev",
+    "Segment_ID",
+    "Surface_Temp_C",
+    "Surface_O2_umol_L",
+    "Vertical_Temp_Grad",
+    "Vertical_O2_Grad",
+    "O2_Derivative_1W",
+    "Depth1_Chl_a_lag4W",
+    "Depth1_Nitrat_lag4W",
+    "Depth1_Phosphat_lag4W",
+    "Depth1_Temp_lag4W"
+  ],
+  "weight_configuration": {
+    "thresholds": {
+      "watch": 80.0,
+      "hypoxic": 60.0,
+      "severe": 30.0
+    },
+    "tier_weights": {
+      "normoxic": 1.0,
+      "watch": 3.0,
+      "hypoxic": 6.0,
+      "severe": 12.0
+    }
+  },
+  "dataset_info": {
+    "total_samples": 234,
+    "train_samples": 187,
+    "val_samples": 47,
+    "date_range": {
+      "start": "1992-08-10 00:00:00",
+      "end": "2021-10-11 00:00:00"
+    },
+    "train_date_range": {
+      "start": "1992-08-10 00:00:00",
+      "end": "2015-12-14 00:00:00"
+    },
+    "val_date_range": {
+      "start": "2016-04-18 00:00:00",
+      "end": "2021-10-11 00:00:00"
+    },
+    "encoder_length": 16,
+    "decoder_length": 8,
+    "batch_size": 64
+  }
+}
