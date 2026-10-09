@@ -136,11 +136,14 @@ def test_engineer_features_includes_all_features():
     if features.INCLUDE_O2_DERIVATIVE:
         assert "O2_Derivative_1W" in result.columns
 
-    # Depth 1 lagged features (representing dead organic material)
-    assert "Depth1_Chl_a_lag4W" in result.columns
-    assert "Depth1_Nitrat_lag4W" in result.columns
-    assert "Depth1_Phosphat_lag4W" in result.columns
-    assert "Depth1_Temp_lag4W" in result.columns
+    # Depth 1 lagged features (2-week lag to minimize data loss)
+    assert "Depth1_Chl_a_lag2W" in result.columns
+    assert "Depth1_Nitrat_lag2W" in result.columns
+    assert "Depth1_Phosphat_lag2W" in result.columns
+    assert "Depth1_Temp_lag2W" in result.columns
+
+    # Chl_a at 25m should be removed (poor coverage: 43%)
+    assert "Chl_a" not in result.columns
 
 
 def test_include_o2_derivative_flag():

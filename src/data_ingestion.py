@@ -137,6 +137,9 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
 def load_and_clean_boknis_data(
     max_gap_days: int = 60,
     required_columns: list[str] | None = None,
+    use_reanalysis: bool = True,
+    reanalysis_start: str = "1993-01-01",
+    reanalysis_end: str = "2023-12-31",
 ) -> pd.DataFrame:
     ocean = _load_ocean_data().sort_values("Date")
     weather = _fetch_schoenhagen_weather().sort_values("Date")
@@ -148,13 +151,43 @@ def load_and_clean_boknis_data(
         ocean, weather, on="Date", direction="nearest", tolerance=pd.Timedelta("3 days")
     )
 
-    if required_columns is None:
-        required_columns = [c for c in combined.columns if c != "Date"]
-    combined = (
-        combined.dropna(subset=required_columns)
-        .sort_values(["Date", "Depth_m"])
-        .reset_index(drop=True)
-    )
+    # Fill gaps with Copernicus reanalysis if requested
+    if use_reanalysis:
+        try:
+            from src import copernicus_reanalysis
+
+            print("\n[Reanalysis] Loading Copernicus Marine reanalysis data...")
+            df_reanalysis = copernicus_reanalysis.load_or_fetch_reanalysis(
+                start_date=reanalysis_start,
+                end_date=reanalysis_end,
+                force_refresh=False,
+            )
+
+            print(f"[Reanalysis] Merging with observed data...")
+            # Variables to fill with reanalysis (matching our column names)
+            variables_to_fill = ["O2_umol_L", "Chl_a", "NO3", "PO4", "Temp_C", "Salinity"]
+
+            combined = copernicus_reanalysis.merge_with_observations(
+                df_observed=combined,
+                df_reanalysis=df_reanalysis,
+                variables_to_fill=variables_to_fill,
+            )
+
+            print(f"[Reanalysis] Gap-filling complete!")
+
+        except ImportError as e:
+            print(f"[Reanalysis] Warning: Could not load reanalysis module: {e}")
+            print("[Reanalysis] Continuing without gap-filling...")
+        except Exception as e:
+            print(f"[Reanalysis] Warning: Error during gap-filling: {e}")
+            print("[Reanalysis] Continuing with observed data only...")
+
+    # Note: We no longer drop rows with NaN here - let the pipeline handle it
+    # This allows reanalysis-filled data to flow through
+    if required_columns is not None:
+        combined = combined.dropna(subset=required_columns)
+
+    combined = combined.sort_values(["Date", "Depth_m"]).reset_index(drop=True)
     
     days_in_year = np.where(combined["Date"].dt.is_leap_year, 366, 365)
     day_of_year = combined["Date"].dt.dayofyear

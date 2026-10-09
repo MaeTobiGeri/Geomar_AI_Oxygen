@@ -43,13 +43,11 @@ def create_training_dataset(
         time_varying_unknown_reals = [
             # Core physical measurements at 25m
             "Temp_C", "Salinity", "NO3", "NO2", "PO4", "Silicate",
-            # Weather variables
-            "Air_Temp_C", "Wind_Speed_ms", "Wind_Dir_deg", "Wind_U", "Wind_V",
             # Temporal features from data ingestion
             "Season_sin", "Season_cos", "Years_since_start", "Days_since_prev", "Segment_ID",
             # Surface readings (1m depth)
             "Surface_Temp_C", "Surface_O2_umol_L",
-            # Vertical gradients
+            # Vertical gradients (stratification proxies)
             "Vertical_Temp_Grad", "Vertical_O2_Grad",
             # Depth 1 lagged features (2-week lag)
             "Depth1_Chl_a_lag2W", "Depth1_Nitrat_lag2W", "Depth1_Phosphat_lag2W", "Depth1_Temp_lag2W",

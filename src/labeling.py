@@ -47,9 +47,19 @@ def add_oxygen_deficit(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_sample_weight(df: pd.DataFrame) -> pd.DataFrame:
+def add_sample_weight(df: pd.DataFrame, reanalysis_penalty: float = 0.5) -> pd.DataFrame:
     """Tiered loss weight by severity; NaN where O2 is unknown, so an unlabeled week isn't
-    mistaken for a confidently-normoxic one downstream."""
+    mistaken for a confidently-normoxic one downstream.
+
+    Args:
+        df: DataFrame with O2_umol_L column
+        reanalysis_penalty: Multiplier for samples with reanalysis data (0.0-1.0).
+                           Default 0.5 means reanalysis samples get 50% weight.
+                           Set to 1.0 to treat reanalysis equal to observations.
+
+    Returns:
+        DataFrame with sample_weight column added, adjusted for reanalysis data source
+    """
     df = df.copy()
     conditions = [
         df["O2_umol_L"].isna(),
@@ -59,6 +69,21 @@ def add_sample_weight(df: pd.DataFrame) -> pd.DataFrame:
     ]
     weights = [np.nan, TIER_WEIGHTS["severe"], TIER_WEIGHTS["hypoxic"], TIER_WEIGHTS["watch"]]
     df["sample_weight"] = np.select(conditions, weights, default=TIER_WEIGHTS["normoxic"])
+
+    # Apply reanalysis penalty if data source columns exist
+    # Average across all variables to get overall reanalysis fraction
+    source_cols = [col for col in df.columns if col.endswith("_source")]
+    if source_cols:
+        # Calculate average data source (0=all observed, 1=all reanalysis, 0.5=mixed)
+        df["reanalysis_fraction"] = df[source_cols].mean(axis=1)
+
+        # Apply penalty: weight = base_weight * (1 - fraction * (1 - penalty))
+        # If fraction=0 (observed): weight unchanged
+        # If fraction=1 (reanalysis): weight *= penalty
+        # If fraction=0.5 (mixed): weight *= (1 + penalty)/2
+        penalty_factor = 1 - df["reanalysis_fraction"] * (1 - reanalysis_penalty)
+        df["sample_weight"] = df["sample_weight"] * penalty_factor
+
     return df
 
 
