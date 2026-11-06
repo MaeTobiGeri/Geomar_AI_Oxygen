@@ -12,7 +12,6 @@ pytorch-forecasting==1.7.0
 lightning>=2.0.0,<2.7.0
 
 # Data processing (compatible versions)
-wetterdienst>=0.90.0
 
 # Visualization (compatible versions)
 plotly>=5.0.0

@@ -3,26 +3,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from wetterdienst.provider.dwd.observation import DwdObservationRequest
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "Documentation" / "data"
-WEATHER_CACHE_PATH = Path(__file__).resolve().parent.parent / ".weather_cache" / "schoenhagen_daily.csv"
-DWD_STATION_ID = "05930"
-
-# wetterdienst renamed the hourly DWD parameters in newer releases; try the new names first,
-# then the old ones so both pinned (local) and unpinned (Colab) installs work.
-DWD_PARAMETER_SETS = [
-    [
-        "hourly/wind/wind_speed_mean",
-        "hourly/wind/wind_direction_mean",
-        "hourly/temperature_air/temperature_air_2m",
-    ],
-    [
-        "hourly/wind/wind_speed",
-        "hourly/wind/wind_direction",
-        "hourly/temperature_air/temperature_air_mean_2m",
-    ],
-]
 
 OLD_OCEAN_COLUMNS = {
     "Date/Time": "Date",
@@ -87,78 +69,6 @@ def _load_ocean_data() -> pd.DataFrame:
     return ocean.drop(columns="Chl_a_supplement")
 
 
-def _fetch_schoenhagen_weather() -> pd.DataFrame:
-    if WEATHER_CACHE_PATH.exists():
-        return pd.read_csv(WEATHER_CACHE_PATH, parse_dates=["Date"])
-
-    request = None
-    last_error = None
-    for parameters in DWD_PARAMETER_SETS:
-        try:
-            request = DwdObservationRequest(
-                parameters=parameters,
-                periods=["historical", "recent"],
-            ).filter_by_station_id(DWD_STATION_ID)
-            break
-        except Exception as exc:  # wetterdienst renamed parameters across versions
-            last_error = exc
-    if request is None:
-        raise last_error
-
-    stations = request.df.to_pandas()
-    print(f"[weather] stations matched: {len(stations)}")
-
-    # newer wetterdienst made `values` a method instead of a property
-    values = request.values() if callable(request.values) else request.values
-    raw = values.all().df.to_pandas()
-    print(f"[weather] raw shape: {raw.shape}, columns: {list(raw.columns)}")
-
-    if raw.empty:
-        raise RuntimeError(
-            f"DWD returned no data for station {DWD_STATION_ID}. "
-            "Check the station ID and that it has hourly wind and air temperature."
-        )
-
-    raw.columns = [c.lower() for c in raw.columns]
-
-    date_col = next((c for c in ("date", "timestamp", "datetime") if c in raw.columns), None)
-    if date_col is None:
-        raise RuntimeError(f"No date column found in DWD result: {list(raw.columns)}")
-
-    if "parameter" in raw.columns:
-        hourly = raw.pivot_table(
-            index=date_col, columns="parameter", values="value", observed=True
-        ).reset_index()
-    else:  
-        hourly = raw.copy()
-
-    hourly = hourly.rename(
-        columns={
-            date_col: "Date",
-            "wind_speed": "Wind_Speed_ms",
-            "wind_speed_mean": "Wind_Speed_ms",
-            "wind_direction": "Wind_Dir_deg",
-            "wind_direction_mean": "Wind_Dir_deg",
-            "temperature_air_mean_2m": "Air_Temp_C",
-            "temperature_air_2m": "Air_Temp_C",
-        }
-    )
-    hourly["Date"] = pd.to_datetime(hourly["Date"]).dt.tz_localize(None)
-
-    daily = hourly.set_index("Date")[["Wind_Speed_ms", "Wind_Dir_deg", "Air_Temp_C"]]
-    daily = daily.resample("D").mean().reset_index()
-
-    wind_dir_rad = np.radians(daily["Wind_Dir_deg"])
-    daily["Wind_U"] = -daily["Wind_Speed_ms"] * np.sin(wind_dir_rad)
-    daily["Wind_V"] = -daily["Wind_Speed_ms"] * np.cos(wind_dir_rad)
-
-    daily = daily[["Date", "Air_Temp_C", "Wind_Speed_ms", "Wind_Dir_deg", "Wind_U", "Wind_V"]]
-
-    WEATHER_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    daily.to_csv(WEATHER_CACHE_PATH, index=False)
-    return daily
-
-
 def load_and_clean_boknis_data(
     max_gap_days: int = 60,
     required_columns: list[str] | None = None,
@@ -167,14 +77,8 @@ def load_and_clean_boknis_data(
     reanalysis_end: str = "2023-12-31",
 ) -> pd.DataFrame:
     ocean = _load_ocean_data().sort_values("Date")
-    weather = _fetch_schoenhagen_weather().sort_values("Date")
-
     ocean["Date"] = pd.to_datetime(ocean["Date"]).dt.as_unit("ns")
-    weather["Date"] = pd.to_datetime(weather["Date"]).dt.as_unit("ns")
-
-    combined = pd.merge_asof(
-        ocean, weather, on="Date", direction="nearest", tolerance=pd.Timedelta("3 days")
-    )
+    combined = ocean
 
     # Fill gaps with Copernicus reanalysis if requested
     if use_reanalysis:

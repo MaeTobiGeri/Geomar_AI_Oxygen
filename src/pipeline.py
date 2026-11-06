@@ -16,11 +16,6 @@ NUMERIC_COLUMNS = [
     "Silicate",
     "O2_umol_L",
     "Chl_a",
-    "Air_Temp_C",
-    "Wind_Speed_ms",
-    "Wind_Dir_deg",
-    "Wind_U",
-    "Wind_V",
 ]
 
 # Columns actually resampled/imputed per depth. Depth_m itself is excluded: within a
