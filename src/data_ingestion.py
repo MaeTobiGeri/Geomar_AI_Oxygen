@@ -9,6 +9,21 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "Documentation" / "data"
 WEATHER_CACHE_PATH = Path(__file__).resolve().parent.parent / ".weather_cache" / "schoenhagen_daily.csv"
 DWD_STATION_ID = "05930"
 
+# wetterdienst renamed the hourly DWD parameters in newer releases; try the new names first,
+# then the old ones so both pinned (local) and unpinned (Colab) installs work.
+DWD_PARAMETER_SETS = [
+    [
+        "hourly/wind/wind_speed_mean",
+        "hourly/wind/wind_direction_mean",
+        "hourly/temperature_air/temperature_air_2m",
+    ],
+    [
+        "hourly/wind/wind_speed",
+        "hourly/wind/wind_direction",
+        "hourly/temperature_air/temperature_air_mean_2m",
+    ],
+]
+
 OLD_OCEAN_COLUMNS = {
     "Date/Time": "Date",
     "Depth water [m]": "Depth_m",
@@ -76,19 +91,26 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
     if WEATHER_CACHE_PATH.exists():
         return pd.read_csv(WEATHER_CACHE_PATH, parse_dates=["Date"])
 
-    request = DwdObservationRequest(
-        parameters=[
-            "hourly/wind/wind_speed",
-            "hourly/wind/wind_direction",
-            "hourly/temperature_air/temperature_air_mean_2m",
-        ],
-        periods=["historical", "recent"],
-    ).filter_by_station_id(DWD_STATION_ID)
+    request = None
+    last_error = None
+    for parameters in DWD_PARAMETER_SETS:
+        try:
+            request = DwdObservationRequest(
+                parameters=parameters,
+                periods=["historical", "recent"],
+            ).filter_by_station_id(DWD_STATION_ID)
+            break
+        except Exception as exc:  # wetterdienst renamed parameters across versions
+            last_error = exc
+    if request is None:
+        raise last_error
 
     stations = request.df.to_pandas()
     print(f"[weather] stations matched: {len(stations)}")
 
-    raw = request.values.all().df.to_pandas()
+    # newer wetterdienst made `values` a method instead of a property
+    values = request.values() if callable(request.values) else request.values
+    raw = values.all().df.to_pandas()
     print(f"[weather] raw shape: {raw.shape}, columns: {list(raw.columns)}")
 
     if raw.empty:
@@ -114,8 +136,11 @@ def _fetch_schoenhagen_weather() -> pd.DataFrame:
         columns={
             date_col: "Date",
             "wind_speed": "Wind_Speed_ms",
+            "wind_speed_mean": "Wind_Speed_ms",
             "wind_direction": "Wind_Dir_deg",
+            "wind_direction_mean": "Wind_Dir_deg",
             "temperature_air_mean_2m": "Air_Temp_C",
+            "temperature_air_2m": "Air_Temp_C",
         }
     )
     hourly["Date"] = pd.to_datetime(hourly["Date"]).dt.tz_localize(None)
