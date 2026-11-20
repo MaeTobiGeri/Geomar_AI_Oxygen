@@ -21,6 +21,10 @@ from pathlib import Path
 
 from src import data_ingestion, pipeline, labeling, features, dataset, model
 
+# Set from --no-reanalysis in main(). The reanalysis download/cache read happens once per
+# process (memoized in src/copernicus_reanalysis.py), not once per trial.
+USE_REANALYSIS = True
+
 
 def objective(trial: optuna.Trial) -> float:
     """Optuna objective function: train TFT with trial hyperparameters, return val_loss.
@@ -53,7 +57,7 @@ def objective(trial: optuna.Trial) -> float:
     df_combined = data_ingestion.load_and_clean_boknis_data()
 
     # Weekly resampling (Phase 3)
-    df_weekly = pipeline.prepare_weekly_series(df_combined)
+    df_weekly = pipeline.prepare_weekly_series(df_combined, use_reanalysis=USE_REANALYSIS)
 
     # Select 25m target series (Phase 4)
     df_25m = labeling.select_target_series(df_weekly)
@@ -133,7 +137,12 @@ def main():
                         help="Optuna study name")
     parser.add_argument("--storage", type=str, default=None,
                         help="Optuna storage URL (e.g., sqlite:///optuna.db)")
+    parser.add_argument("--no-reanalysis", action="store_true",
+                        help="Disable Copernicus reanalysis gap-filling")
     args = parser.parse_args()
+
+    global USE_REANALYSIS
+    USE_REANALYSIS = not args.no_reanalysis
 
     # Disable deterministic algorithms for CUDA compatibility
     # Some CUDA operations (like upsample_linear1d_backward) don't have deterministic implementations

@@ -143,7 +143,7 @@ def main():
     df_combined = data_ingestion.load_and_clean_boknis_data()
 
     # Weekly resampling
-    df_weekly = pipeline.prepare_weekly_series(df_combined)
+    df_weekly = pipeline.prepare_weekly_series(df_combined, use_reanalysis=True)
 
     # Select 25m target series
     df_25m = labeling.select_target_series(df_weekly)

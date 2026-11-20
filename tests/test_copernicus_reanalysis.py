@@ -1,0 +1,72 @@
+import numpy as np
+import pandas as pd
+import pytest
+
+from src import copernicus_reanalysis as cr
+from src.pipeline import prepare_weekly_series
+
+
+def test_temperature_and_salinity_come_from_physics_dataset():
+    # thetao/so don't exist in the BGC dataset; requesting them there was the original bug
+    bgc, phy = cr.DATASETS["cmems_mod_bal_bgc_my_P1M-m"], cr.DATASETS["cmems_mod_bal_phy_my_P1M-m"]
+    assert "thetao" not in bgc and "so" not in bgc
+    assert set(phy) == {"thetao", "so"}
+
+
+def test_nearest_valid_series_skips_land_cells():
+    xr = pytest.importorskip("xarray")
+    times = pd.date_range("2000-01-01", periods=3, freq="MS")
+    lats = np.array([cr.BOKNIS_LAT, cr.BOKNIS_LAT + 0.05])
+    lons = np.array([cr.BOKNIS_LON, cr.BOKNIS_LON + 0.05])
+    data = np.full((3, 1, 2, 2), np.nan)
+    data[:, 0, 1, 1] = [1.0, 2.0, 3.0]  # only the farther cell is sea
+    da = xr.DataArray(
+        data,
+        dims=("time", "depth", "latitude", "longitude"),
+        coords={"time": times, "depth": [25.0], "latitude": lats, "longitude": lons},
+    )
+    series = cr._nearest_valid_series(da, 25.0)
+    assert series.tolist() == [1.0, 2.0, 3.0]
+
+
+def test_fill_gaps_only_fills_missing_weeks_at_matching_depth():
+    monthly = pd.DataFrame(
+        {
+            "Date": list(pd.date_range("2000-01-01", periods=6, freq="MS")) * 2,
+            "Depth_m": [1.0] * 6 + [25.0] * 6,
+            "O2_umol_L": [300.0] * 6 + [50.0] * 6,
+        }
+    )
+    reanalysis = cr.interpolate_monthly_to_weekly(monthly)
+
+    dates = pd.date_range("2000-01-03", periods=20, freq="W-MON")
+    o2_25 = [100.0] * 3 + [np.nan] * 14 + [100.0] * 3  # interior gap > interpolation limit
+    raw = pd.DataFrame(
+        {
+            "Date": list(dates) * 2,
+            "Depth_m": [1] * 20 + [25] * 20,
+            "O2_umol_L": [280.0] * 20 + o2_25,
+        }
+    )
+    for col in ["Temp_C", "Salinity", "NO3", "NO2", "PO4", "Silicate", "Chl_a"]:
+        raw[col] = 1.0
+
+    weekly = prepare_weekly_series(raw)
+    assert weekly.loc[weekly["Depth_m"] == 25, "O2_umol_L"].isna().any()
+
+    filled = cr.fill_gaps(weekly, reanalysis)
+    at_25 = filled[filled["Depth_m"] == 25]
+    at_1 = filled[filled["Depth_m"] == 1]
+
+    gap = at_25["O2_umol_L_source"] == 1
+    assert gap.sum() > 0
+    assert (at_25.loc[gap, "O2_umol_L"] == 50.0).all()  # 25 m values, not surface ones
+    assert (at_25.loc[~gap, "O2_umol_L_source"] == 0).all()
+    assert (at_1["O2_umol_L_source"] == 0).all()  # observed surface untouched
+    assert not filled.columns.str.endswith("_reanalysis").any()
+
+
+def test_load_returns_none_without_download(tmp_path, monkeypatch):
+    monkeypatch.setenv("COPERNICUS_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(cr, "_MEMO", {})
+    assert cr.load_or_fetch_reanalysis(allow_download=False) is None

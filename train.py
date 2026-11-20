@@ -122,6 +122,8 @@ def main():
 
     # Misc
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--no-reanalysis", action="store_true",
+                        help="Disable Copernicus reanalysis gap-filling")
     parser.add_argument("--num-workers", type=int, default=0, help="DataLoader workers")
 
     args = parser.parse_args()
@@ -182,7 +184,7 @@ def main():
     print("\n" + "-"*80)
     print("Phase 3: Weekly Resampling & Imputation")
     print("-"*80)
-    df_weekly = pipeline.prepare_weekly_series(df_combined)
+    df_weekly = pipeline.prepare_weekly_series(df_combined, use_reanalysis=not args.no_reanalysis)
     print(f"Weekly series: {len(df_weekly)} rows")
 
     print("\n" + "-"*80)

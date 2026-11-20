@@ -56,7 +56,7 @@ def load_model_and_data(checkpoint_path: str):
     """
     # Load and prepare data (Phases 2-5)
     df_combined = data_ingestion.load_and_clean_boknis_data()
-    df_weekly = pipeline.prepare_weekly_series(df_combined)
+    df_weekly = pipeline.prepare_weekly_series(df_combined, use_reanalysis=True, allow_download=False)
     df_25m = labeling.select_target_series(df_weekly)
     df_features = features.engineer_features(df_25m, df_weekly)
     df_labeled = labeling.label_hypoxia_risk(df_features)

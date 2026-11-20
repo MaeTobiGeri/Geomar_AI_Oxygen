@@ -558,7 +558,7 @@ def main():
     print("\n" + "-"*80)
     print("Phase 3: Weekly Resampling & Imputation")
     print("-"*80)
-    df_weekly = pipeline.prepare_weekly_series(df_combined)
+    df_weekly = pipeline.prepare_weekly_series(df_combined, use_reanalysis=True)
     print(f"Weekly series: {len(df_weekly)} rows")
 
     print("\n" + "-"*80)
