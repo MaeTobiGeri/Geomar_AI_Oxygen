@@ -242,6 +242,7 @@ def load_or_fetch_reanalysis(
     if cache_file.exists() and not force_refresh:
         print(f"[Reanalysis] Loading cached data: {cache_file}")
         result = pd.read_csv(cache_file, parse_dates=["Date"])
+        _describe(result)
     elif not allow_download:
         print(f"[Reanalysis] No cache at {cache_file} and downloads disabled; skipping gap-filling")
     else:
@@ -250,6 +251,7 @@ def load_or_fetch_reanalysis(
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             weekly.to_csv(cache_file, index=False)
             print(f"[Reanalysis] Cached {len(weekly)} weekly rows to: {cache_file}")
+            _describe(weekly)
             result = weekly
         except Exception as e:
             print(f"[Reanalysis] Could not fetch data: {e}")
@@ -259,11 +261,28 @@ def load_or_fetch_reanalysis(
     return result
 
 
+def _describe(df: pd.DataFrame) -> None:
+    variables = [v for v in REANALYSIS_VARIABLES if v in df.columns]
+    print(f"[Reanalysis] {len(df)} rows, columns: {df.columns.tolist()}")
+    if "Depth_m" not in df.columns or not variables:
+        print("[Reanalysis] WARNING: cache has no Depth_m/variable columns - delete it and re-download")
+        return
+    for depth, group in df.groupby("Depth_m"):
+        counts = {v: int(group[v].notna().sum()) for v in variables}
+        print(f"[Reanalysis]   {depth} m: {counts}")
+    missing = [d for d in TARGET_DEPTHS if d not in set(df["Depth_m"])]
+    if missing:
+        print(f"[Reanalysis] WARNING: no data for depth(s) {missing} m")
+
+
 def fill_gaps(weekly: pd.DataFrame, reanalysis: pd.DataFrame) -> pd.DataFrame:
     """Fill NaNs in the weekly per-depth series with reanalysis values on matching
     (Date, Depth_m) rows, adding `<var>_source` columns (0 = observed/interpolated,
     1 = reanalysis) for every reanalysis variable."""
     variables = [v for v in REANALYSIS_VARIABLES if v in reanalysis.columns and v in weekly.columns]
+    if not variables:
+        print(f"[Reanalysis] WARNING: no fillable variables in reanalysis columns {reanalysis.columns.tolist()}")
+        return weekly
     rean = reanalysis[["Date", "Depth_m", *variables]].rename(columns={v: f"{v}_reanalysis" for v in variables})
     rean["Depth_m"] = rean["Depth_m"].astype(weekly["Depth_m"].dtype)
 

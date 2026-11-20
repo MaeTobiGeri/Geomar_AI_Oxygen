@@ -132,7 +132,16 @@ def create_dataloaders(
 
     training = create_training_dataset(train_df, **dataset_kwargs)
 
-    validation = TimeSeriesDataSet.from_dataset(training, val_df, predict=True, stop_randomization=True)
+    # Every forecast window whose first predicted week lies in the validation period
+    # (not predict=True, which keeps only the single LAST window per series and fails
+    # outright when the data ends in a gap). Encoders may look back into the training
+    # period - that's past input only; all predicted targets are validation weeks.
+    validation = TimeSeriesDataSet.from_dataset(
+        training,
+        pd.concat([train_df, val_df], ignore_index=True),
+        min_prediction_idx=int(val_df["Time_Idx"].min()),
+        stop_randomization=True,
+    )
 
     train_dataloader = training.to_dataloader(
         train=True,
