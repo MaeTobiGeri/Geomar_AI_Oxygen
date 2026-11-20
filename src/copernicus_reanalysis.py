@@ -58,7 +58,7 @@ DATASETS = {
 REANALYSIS_VARIABLES = [col for mapping in DATASETS.values() for col in mapping.values()]
 
 _DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".copernicus_cache"
-CACHE_VERSION = "v3"  # v2 caches lack the 25 m series
+CACHE_VERSION = "v4"  # v2 lacks 25 m; v3 has split _x/_y columns
 
 # In-process memo so repeated pipeline calls (e.g. every Optuna trial) neither re-read
 # the cache nor re-prompt for credentials after a failed download.
@@ -169,12 +169,16 @@ def _fetch_dataset(copernicusmarine, dataset_id: str, mapping: dict[str, str], s
                     )
         nc_file.unlink(missing_ok=True)
 
+    return _combine(frames)
+
+
+def _combine(frames: list[pd.DataFrame]) -> pd.DataFrame | None:
+    """Combine per-(variable, depth) long frames into one row per (Date, Depth_m).
+    (Merging them pairwise would turn the 1 m and 25 m copies of the same variable into
+    separate `_x`/`_y` columns.)"""
     if not frames:
         return None
-    df = frames[0]
-    for frame in frames[1:]:
-        df = df.merge(frame, on=["Date", "Depth_m"], how="outer")
-    return df
+    return pd.concat(frames, ignore_index=True).groupby(["Date", "Depth_m"], as_index=False).first()
 
 
 def fetch_copernicus_data(start_date: str = "1993-01-01", end_date: str = "2023-12-31") -> pd.DataFrame:
@@ -190,12 +194,8 @@ def fetch_copernicus_data(start_date: str = "1993-01-01", end_date: str = "2023-
     print(f"Fetching Copernicus reanalysis for {start_date} to {end_date}...")
     print(f"Location: Boknis Eck ({BOKNIS_LAT}°N, {BOKNIS_LON}°E), depths {TARGET_DEPTHS} m")
 
-    df = None
-    for dataset_id, mapping in DATASETS.items():
-        part = _fetch_dataset(copernicusmarine, dataset_id, mapping, start_date, end_date)
-        if part is None:
-            continue
-        df = part if df is None else df.merge(part, on=["Date", "Depth_m"], how="outer")
+    parts = [_fetch_dataset(copernicusmarine, dataset_id, mapping, start_date, end_date) for dataset_id, mapping in DATASETS.items()]
+    df = _combine([p for p in parts if p is not None])
 
     if df is None:
         raise RuntimeError("No reanalysis variables could be fetched (check credentials / dataset ids)")

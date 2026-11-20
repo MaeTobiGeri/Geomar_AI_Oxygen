@@ -46,6 +46,19 @@ def test_nearest_valid_series_rejects_levels_too_far_from_target():
     assert cr._nearest_valid_series(da, 25.0) is None
 
 
+def test_combine_keeps_one_column_per_variable_across_depths():
+    dates = pd.date_range("2000-01-01", periods=2, freq="MS")
+    frames = [
+        pd.DataFrame({"Date": dates, "Depth_m": depth, var: value})
+        for var in ("O2_umol_L", "Temp_C")
+        for depth, value in ((1.0, 1.0), (25.0, 2.0))
+    ]
+    df = cr._combine(frames)
+    assert sorted(df.columns) == ["Date", "Depth_m", "O2_umol_L", "Temp_C"]
+    assert len(df) == 4 and df.notna().all().all()
+    assert (df.loc[df["Depth_m"] == 25.0, "O2_umol_L"] == 2.0).all()
+
+
 def test_fill_gaps_only_fills_missing_weeks_at_matching_depth():
     monthly = pd.DataFrame(
         {
