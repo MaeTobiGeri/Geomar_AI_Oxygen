@@ -35,7 +35,11 @@ import pandas as pd
 BOKNIS_LAT = 54.5295
 BOKNIS_LON = 10.0393
 TARGET_DEPTHS = (1.0, 25.0)  # surface features + 25 m target series
-BOX_HALF_WIDTH_DEG = 0.1  # search box for the nearest valid (sea, deep enough) cell
+BOX_HALF_WIDTH_DEG = 0.15  # search box for the nearest valid (sea, deep enough) cell
+# The model's smoothed bathymetry is shallower than the real ~28 m station, so the level
+# nearest 25 m is often dry near the coast. Accept the closest wet level within this
+# tolerance (near-bottom water, which is what matters for hypoxia).
+MAX_DEPTH_MISMATCH_M = 6.0
 
 # Copernicus dataset id -> {Copernicus variable: our column name}
 DATASETS = {
@@ -54,7 +58,7 @@ DATASETS = {
 REANALYSIS_VARIABLES = [col for mapping in DATASETS.values() for col in mapping.values()]
 
 _DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / ".copernicus_cache"
-CACHE_VERSION = "v2"
+CACHE_VERSION = "v3"  # v2 caches lack the 25 m series
 
 # In-process memo so repeated pipeline calls (e.g. every Optuna trial) neither re-read
 # the cache nor re-prompt for credentials after a failed download.
@@ -69,25 +73,35 @@ def _cache_file(start_date: str, end_date: str) -> Path:
     return cache_dir() / f"boknis_eck_reanalysis_{CACHE_VERSION}_{start_date}_{end_date}.csv"
 
 
-def _nearest_valid_series(da, depth: float) -> pd.Series | None:
-    """Time series of `da` at the model level nearest `depth`, from the grid cell nearest
-    Boknis Eck that actually has data at that level (skips land / too-shallow cells)."""
-    import xarray as xr
-
-    da = da.sel(depth=depth, method="nearest")
-    valid = da.notnull().any("time").transpose("latitude", "longitude")
-    if not bool(valid.any()):
-        return None
-
-    lat2d, lon2d = xr.broadcast(da["latitude"], da["longitude"])
-    lat2d = lat2d.transpose("latitude", "longitude").values
-    lon2d = lon2d.transpose("latitude", "longitude").values
+def _nearest_valid_series(da, depth: float) -> tuple[pd.Series, str] | None:
+    """Time series of `da` (time, depth, latitude, longitude) at the grid cell nearest
+    Boknis Eck that has data at a model level within MAX_DEPTH_MISMATCH_M of `depth`,
+    using that cell's wet level closest to `depth`. Returns (series, description of the
+    chosen cell) or None if no cell qualifies."""
+    levels = da["depth"].values
+    wet = da.notnull().any("time").transpose("depth", "latitude", "longitude").values
+    lat2d, lon2d = np.meshgrid(da["latitude"].values, da["longitude"].values, indexing="ij")
     dist = (lat2d - BOKNIS_LAT) ** 2 + ((lon2d - BOKNIS_LON) * np.cos(np.radians(BOKNIS_LAT))) ** 2
-    dist = np.where(valid.values, dist, np.nan)
-    i, j = np.unravel_index(np.nanargmin(dist), dist.shape)
 
-    point = da.isel(latitude=i, longitude=j)
-    return pd.Series(point.values, index=pd.to_datetime(point["time"].values))
+    best = None  # (distance, i, j, level index)
+    for i, j in zip(*np.nonzero(wet.any(axis=0))):
+        wet_levels = np.nonzero(wet[:, i, j])[0]
+        k = wet_levels[np.argmin(np.abs(levels[wet_levels] - depth))]
+        if abs(levels[k] - depth) <= MAX_DEPTH_MISMATCH_M and (best is None or dist[i, j] < best[0]):
+            best = (dist[i, j], i, j, k)
+
+    if best is None:
+        return None
+    _, i, j, k = best
+    point = da.isel(latitude=i, longitude=j, depth=k)
+    km = np.sqrt(best[0]) * 111.2
+    info = f"cell {lat2d[i, j]:.3f}N {lon2d[i, j]:.3f}E ({km:.1f} km away), model level {levels[k]:.1f} m"
+    return pd.Series(point.values, index=pd.to_datetime(point["time"].values)), info
+
+
+def _deepest_wet_level(da) -> float:
+    wet = da.notnull().any(["time", "latitude", "longitude"]).values
+    return float(da["depth"].values[wet].max()) if wet.any() else float("nan")
 
 
 def _subset_dataset(copernicusmarine, dataset_id: str, variables: list[str], start_date: str, end_date: str) -> Path:
@@ -104,7 +118,7 @@ def _subset_dataset(copernicusmarine, dataset_id: str, variables: list[str], sta
         maximum_longitude=BOKNIS_LON + BOX_HALF_WIDTH_DEG,
         minimum_latitude=BOKNIS_LAT - BOX_HALF_WIDTH_DEG,
         maximum_latitude=BOKNIS_LAT + BOX_HALF_WIDTH_DEG,
-        minimum_depth=0.0,
+        minimum_depth=0.5,
         maximum_depth=max(TARGET_DEPTHS) + 5,
         start_datetime=start_date,
         end_datetime=end_date,
@@ -140,10 +154,16 @@ def _fetch_dataset(copernicusmarine, dataset_id: str, mapping: dict[str, str], s
                     print(f"  {dataset_id}: '{var}' missing from download, skipping")
                     continue
                 for depth in TARGET_DEPTHS:
-                    series = _nearest_valid_series(ds[var].load(), depth)
-                    if series is None:
-                        print(f"  {dataset_id}: no valid '{var}' cell at {depth} m")
+                    da = ds[var].load()
+                    found = _nearest_valid_series(da, depth)
+                    if found is None:
+                        print(
+                            f"  {dataset_id}: no '{var}' cell within {MAX_DEPTH_MISMATCH_M} m of "
+                            f"{depth} m (deepest wet level in box: {_deepest_wet_level(da):.1f} m)"
+                        )
                         continue
+                    series, info = found
+                    print(f"  {dataset_id}: '{var}' @ {depth} m -> {info}")
                     frames.append(
                         pd.DataFrame({"Date": series.index, "Depth_m": depth, mapping[var]: series.values})
                     )

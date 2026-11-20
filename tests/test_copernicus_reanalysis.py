@@ -13,20 +13,37 @@ def test_temperature_and_salinity_come_from_physics_dataset():
     assert set(phy) == {"thetao", "so"}
 
 
-def test_nearest_valid_series_skips_land_cells():
+def _grid(depths, values_by_cell):
     xr = pytest.importorskip("xarray")
     times = pd.date_range("2000-01-01", periods=3, freq="MS")
     lats = np.array([cr.BOKNIS_LAT, cr.BOKNIS_LAT + 0.05])
     lons = np.array([cr.BOKNIS_LON, cr.BOKNIS_LON + 0.05])
-    data = np.full((3, 1, 2, 2), np.nan)
-    data[:, 0, 1, 1] = [1.0, 2.0, 3.0]  # only the farther cell is sea
-    da = xr.DataArray(
+    data = np.full((3, len(depths), 2, 2), np.nan)
+    for (k, i, j), value in values_by_cell.items():
+        data[:, k, i, j] = value
+    return xr.DataArray(
         data,
         dims=("time", "depth", "latitude", "longitude"),
-        coords={"time": times, "depth": [25.0], "latitude": lats, "longitude": lons},
+        coords={"time": times, "depth": depths, "latitude": lats, "longitude": lons},
     )
-    series = cr._nearest_valid_series(da, 25.0)
+
+
+def test_nearest_valid_series_skips_land_cells():
+    da = _grid([25.0], {(0, 1, 1): [1.0, 2.0, 3.0]})  # only the farther cell is sea
+    series, _ = cr._nearest_valid_series(da, 25.0)
     assert series.tolist() == [1.0, 2.0, 3.0]
+
+
+def test_nearest_valid_series_uses_shallower_bottom_level_within_tolerance():
+    # nearest cell's bottom is at 21 m (25.5 m level is dry): use 21 m there
+    da = _grid([1.0, 21.0, 25.5], {(0, 0, 0): 9.0, (1, 0, 0): 5.0, (2, 1, 1): 7.0})
+    series, info = cr._nearest_valid_series(da, 25.0)
+    assert (series == 5.0).all() and "21.0 m" in info
+
+
+def test_nearest_valid_series_rejects_levels_too_far_from_target():
+    da = _grid([1.0, 10.0], {(0, 0, 0): 9.0, (1, 0, 0): 5.0})
+    assert cr._nearest_valid_series(da, 25.0) is None
 
 
 def test_fill_gaps_only_fills_missing_weeks_at_matching_depth():
